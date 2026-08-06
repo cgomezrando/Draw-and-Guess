@@ -1,0 +1,129 @@
+workflows:
+  ios-ipad-portrait:
+    name: iOS Portrait iPad Build
+    max_build_duration: 120
+    integrations:
+      app_store_connect: Apple Developer
+    environment:
+      groups:
+        - ios_signing_keys
+      vars:
+        BUNDLE_ID: com.cgr.crucigramasdelcid
+        P12_PASSWORD: TempBuildPass123
+      flutter: 3.32.0
+      xcode: 26.6
+      cocoapods: default
+
+    scripts:
+      - name: Decode certificate private key
+        script: |
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 -D > /tmp/certificate_private_key.pem
+
+      - name: Set up keychain
+        script: keychain initialize
+
+      - name: Set bundle identifier
+        script: |
+          sed -i '' "s/com\.mycompany\.crucigramasdelcid/com.cgr.crucigramasdelcid/g" ios/Runner.xcodeproj/project.pbxproj
+          echo "Bundle IDs in project after change:"
+          grep -n 'PRODUCT_BUNDLE_IDENTIFIER' ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key "$(cat /tmp/certificate_private_key.pem)" \
+            --p12-password "$P12_PASSWORD" \
+            --create
+
+      - name: Import certificate into keychain
+        script: |
+          keychain add-certificates \
+            --certificate "/Users/builder/Library/Developer/Xcode/UserData/Certificates/*.p12" \
+            --certificate-password "$P12_PASSWORD"
+
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Configure iPad-only portrait-only target
+        script: |
+          set -euo pipefail
+
+          PLIST="ios/Runner/Info.plist"
+          PBXPROJ="ios/Runner.xcodeproj/project.pbxproj"
+
+          test -f "$PLIST"
+          test -f "$PBXPROJ"
+
+          # 1 = iPhone/iPod touch, 2 = iPad. Force every build configuration to iPad only.
+          python3 - "$PBXPROJ" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          text, family_count = re.subn(
+              r'TARGETED_DEVICE_FAMILY\s*=\s*[^;]+;',
+              'TARGETED_DEVICE_FAMILY = 2;',
+              text,
+          )
+          if family_count == 0:
+              raise SystemExit('TARGETED_DEVICE_FAMILY was not found in project.pbxproj')
+
+          replacements = {
+              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad\s*=\s*[^;]+;':
+                  'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";',
+              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone\s*=\s*[^;]+;':
+                  'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";',
+              r'INFOPLIST_KEY_UIRequiresFullScreen\s*=\s*[^;]+;':
+                  'INFOPLIST_KEY_UIRequiresFullScreen = YES;',
+          }
+          for pattern, replacement in replacements.items():
+              text = re.sub(pattern, replacement, text)
+
+          path.write_text(text)
+          print(f'Updated TARGETED_DEVICE_FAMILY in {family_count} build configurations')
+          PY
+
+          set_portrait_array() {
+            local key="$1"
+            /usr/libexec/PlistBuddy -c "Delete :${key}" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :${key} array" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :${key}:0 string UIInterfaceOrientationPortrait" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :${key}:1 string UIInterfaceOrientationPortraitUpsideDown" "$PLIST"
+          }
+
+          set_portrait_array "UISupportedInterfaceOrientations"
+          set_portrait_array "UISupportedInterfaceOrientations~ipad"
+
+          /usr/libexec/PlistBuddy -c "Delete :UIRequiresFullScreen" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST"
+
+          plutil -lint "$PLIST"
+          echo "Source Info.plist after patch:"
+          plutil -p "$PLIST" | grep -E 'UISupportedInterfaceOrientations|UIRequiresFullScreen' -A 5 || true
+          echo "Targeted device family settings:"
+          grep -n 'TARGETED_DEVICE_FAMILY' "$PBXPROJ"
+
+      - name: Install pods
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Flutter build ipa
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
