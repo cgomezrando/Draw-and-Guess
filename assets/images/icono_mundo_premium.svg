@@ -1,0 +1,55 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1F2937" flood-opacity="0.20"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#FFFFFF" flood-opacity="0.55"/>
+    </filter>
+    <linearGradient id="badgeGrad" x1="86" y1="74" x2="426" y2="429" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F6F8FF"/>
+    </linearGradient>
+    <radialGradient id="earthGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(225 168) rotate(59) scale(230 226)">
+      <stop offset="0" stop-color="#8BE6FF"/>
+      <stop offset="0.38" stop-color="#37B9FF"/>
+      <stop offset="0.72" stop-color="#1E7CE8"/>
+      <stop offset="1" stop-color="#2951CC"/>
+    </radialGradient>
+    <linearGradient id="landGrad" x1="150" y1="142" x2="356" y2="379" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9BE66A"/>
+      <stop offset="0.58" stop-color="#55C96E"/>
+      <stop offset="1" stop-color="#2FAE61"/>
+    </linearGradient>
+    <linearGradient id="wifiGrad" x1="338" y1="329" x2="442" y2="446" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#42B7FF"/>
+      <stop offset="1" stop-color="#2477FF"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="131" y1="112" x2="344" y2="344" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="0.62" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="218" fill="url(#badgeGrad)" filter="url(#softShadow)"/>
+  <circle cx="256" cy="256" r="206" stroke="#FFFFFF" stroke-width="10" opacity="0.90"/>
+  <circle cx="172" cy="135" r="18" fill="#FFFFFF" opacity="0.65"/>
+  <circle cx="360" cy="150" r="10" fill="#FFFFFF" opacity="0.60"/>
+
+  <g filter="url(#softShadow)">
+    <circle cx="248" cy="248" r="137" fill="url(#earthGrad)"/>
+    <path d="M146 190C174 149 218 124 268 119C280 133 279 150 262 160C245 170 223 159 207 177C195 191 203 210 185 219C170 226 157 216 146 190Z" fill="url(#landGrad)"/>
+    <path d="M286 127C332 140 368 176 380 222C362 226 347 222 338 207C330 193 337 175 321 165C305 155 294 145 286 127Z" fill="url(#landGrad)"/>
+    <path d="M188 253C205 231 231 222 257 232C274 239 279 257 299 258C315 259 329 249 343 260C356 271 357 292 346 305C329 325 294 314 281 338C270 359 285 382 266 384C220 378 181 349 160 310C154 282 169 268 188 253Z" fill="url(#landGrad)"/>
+    <path d="M319 347C337 332 357 328 376 338C359 361 334 378 305 384C302 370 307 357 319 347Z" fill="url(#landGrad)"/>
+    <path d="M153 245C153 169 215 107 291 107" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.22"/>
+    <path d="M151 247C151 185 194 132 253 118" stroke="url(#shine)" stroke-width="21" stroke-linecap="round" opacity="0.72"/>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <circle cx="373" cy="370" r="64" fill="url(#wifiGrad)"/>
+    <circle cx="373" cy="370" r="56" stroke="#FFFFFF" stroke-width="8" opacity="0.25"/>
+    <path d="M333 354C356 331 390 331 413 354" stroke="#FFFFFF" stroke-width="17" stroke-linecap="round"/>
+    <path d="M351 373C364 360 382 360 395 373" stroke="#FFFFFF" stroke-width="17" stroke-linecap="round"/>
+    <circle cx="373" cy="397" r="10" fill="#FFFFFF"/>
+  </g>
+</svg>

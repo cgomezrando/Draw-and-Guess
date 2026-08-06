@@ -1,0 +1,52 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1F2937" flood-opacity="0.20"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#FFFFFF" flood-opacity="0.55"/>
+    </filter>
+    <linearGradient id="badgeGrad" x1="86" y1="74" x2="426" y2="429" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F6F8FF"/>
+    </linearGradient>
+    <linearGradient id="roofGrad" x1="132" y1="177" x2="380" y2="251" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF7B4A"/>
+      <stop offset="0.52" stop-color="#F45532"/>
+      <stop offset="1" stop-color="#D83B24"/>
+    </linearGradient>
+    <linearGradient id="wallGrad" x1="168" y1="220" x2="350" y2="371" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8EA"/>
+      <stop offset="1" stop-color="#F3DDBB"/>
+    </linearGradient>
+    <linearGradient id="doorGrad" x1="235" y1="291" x2="282" y2="374" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFC95C"/>
+      <stop offset="1" stop-color="#F5A623"/>
+    </linearGradient>
+    <linearGradient id="grassGrad" x1="315" y1="324" x2="388" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#58D184"/>
+      <stop offset="1" stop-color="#2BAE66"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="154" y1="132" x2="349" y2="333" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.80"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="218" fill="url(#badgeGrad)" filter="url(#softShadow)"/>
+  <circle cx="256" cy="256" r="206" stroke="#FFFFFF" stroke-width="10" opacity="0.90"/>
+  <circle cx="166" cy="133" r="18" fill="#FFFFFF" opacity="0.65"/>
+  <circle cx="363" cy="150" r="10" fill="#FFFFFF" opacity="0.60"/>
+
+  <g filter="url(#softShadow)">
+    <path d="M126 241.5L245.2 134.8C251.4 129.3 260.8 129.3 267 134.8L386 241.5C395.4 249.9 389.5 265.5 376.8 265.5H348.8V359.5C348.8 370.5 339.8 379.5 328.8 379.5H183.2C172.2 379.5 163.2 370.5 163.2 359.5V265.5H135.2C122.5 265.5 116.6 249.9 126 241.5Z" fill="url(#wallGrad)"/>
+    <path d="M122 229.5L241.4 122.4C249.7 114.9 262.3 114.9 270.6 122.4L390 229.5C396.1 235 396.6 244.4 391.1 250.5L378.4 264.6C372.9 270.7 363.5 271.2 357.4 265.7L256 174.7L154.6 265.7C148.5 271.2 139.1 270.7 133.6 264.6L120.9 250.5C115.4 244.4 115.9 235 122 229.5Z" fill="url(#roofGrad)"/>
+    <path d="M225 310C225 298.4 234.4 289 246 289H266C277.6 289 287 298.4 287 310V379.5H225V310Z" fill="url(#doorGrad)"/>
+    <circle cx="272" cy="338" r="5.5" fill="#9E5B24" opacity="0.9"/>
+    <rect x="193" y="276" width="43" height="36" rx="10" fill="#A8D8FF" opacity="0.92"/>
+    <rect x="276" y="276" width="43" height="36" rx="10" fill="#A8D8FF" opacity="0.92"/>
+    <path d="M319 361C319 343.9 332.9 330 350 330C359.4 330 367.8 334.2 373.5 340.8C378.1 338.4 383.3 337 388.8 337C407.5 337 422.7 352.2 422.7 370.9C422.7 374.1 420.1 376.7 416.9 376.7H324.8C321.6 376.7 319 374.1 319 370.9V361Z" fill="url(#grassGrad)"/>
+    <path d="M335 334C340 322 352 314 366 314C380 314 392 322 397 334" stroke="#2BAE66" stroke-width="12" stroke-linecap="round" opacity="0.35"/>
+  </g>
+
+  <path d="M108 140C154 78 258 68 340 112" stroke="url(#shine)" stroke-width="20" stroke-linecap="round" opacity="0.55"/>
+</svg>

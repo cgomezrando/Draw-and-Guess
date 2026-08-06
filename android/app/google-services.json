@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "440664175018",
+    "project_id": "draw-and-guess-29e50",
+    "storage_bucket": "draw-and-guess-29e50.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:440664175018:android:74f35739eadcb2412efbd3",
+        "android_client_info": {
+          "package_name": "com.cgr.drawandguess"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFgFFhd2ZX2wsgRhYipyIW2vC8x8RpK-E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
