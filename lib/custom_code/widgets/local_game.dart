@@ -261,14 +261,28 @@ class _LocalGameState extends State<LocalGame> {
       Colors.green,
       Colors.orange,
     ];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
+    Widget tools() => Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-                child: Text('Dibujando: $_drawerName',
-                    style: const TextStyle(color: muted))),
+            ...palette.map((col) {
+              final sel = col == _penColor;
+              return GestureDetector(
+                onTap: () => setState(() => _penColor = col),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: col,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: sel ? navy : Colors.transparent, width: 3),
+                  ),
+                ),
+              );
+            }),
             IconButton(
                 icon: const Icon(Icons.undo, color: navy),
                 onPressed: () => setState(() {
@@ -278,12 +292,19 @@ class _LocalGameState extends State<LocalGame> {
                 icon: const Icon(Icons.delete_outline, color: navy),
                 onPressed: () => setState(() => _strokes.clear())),
           ],
-        ),
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Dibujando: $_drawerName',
+            textAlign: TextAlign.center, style: const TextStyle(color: muted)),
         const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, c) {
+            final avail = MediaQuery.of(context).size.height - 210;
             final side =
-                min(c.maxWidth, MediaQuery.of(context).size.height * 0.55);
+                min(min(c.maxWidth, avail < 220 ? 220.0 : avail), 800.0);
             return Center(
               child: SizedBox(
                 width: side,
@@ -296,14 +317,17 @@ class _LocalGameState extends State<LocalGame> {
                   onPanUpdate: (d) =>
                       setState(() => _current?.points.add(d.localPosition)),
                   onPanEnd: (_) => _current = null,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: CustomPaint(
+                          painter: _Painter(_strokes), size: Size.infinite),
                     ),
-                    child: CustomPaint(
-                        painter: _Painter(_strokes), size: Size.infinite),
                   ),
                 ),
               ),
@@ -311,26 +335,7 @@ class _LocalGameState extends State<LocalGame> {
           },
         ),
         const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: palette.map((col) {
-            final sel = col == _penColor;
-            return GestureDetector(
-              onTap: () => setState(() => _penColor = col),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 6),
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: col,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: sel ? navy : Colors.transparent, width: 3),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
+        tools(),
         const SizedBox(height: 10),
         _btn('Terminé · ¡A puntuar!', () => setState(() => _phase = 'reveal')),
       ],

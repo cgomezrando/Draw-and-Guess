@@ -6,3 +6,6 @@ export '/pages/local_game_page/local_game_page_widget.dart'
 export '/pages/results_page/results_page_widget.dart' show ResultsPageWidget;
 export '/pages/local_pairs_game_page/local_pairs_game_page_widget.dart'
     show LocalPairsGamePageWidget;
+export '/pages/splash_page/splash_page_widget.dart' show SplashPageWidget;
+export '/pages/online_game_page/online_game_page_widget.dart'
+    show OnlineGamePageWidget;

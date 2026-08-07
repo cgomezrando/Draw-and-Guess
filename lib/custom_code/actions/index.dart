@@ -3,3 +3,7 @@ export '/custom_code/actions/ensure_user_doc.dart' show ensureUserDoc;
 export '/custom_code/actions/create_room.dart' show createRoom;
 export '/custom_code/actions/join_room.dart' show joinRoom;
 export '/custom_code/actions/start_local_game.dart' show startLocalGame;
+export '/custom_code/actions/start_online_game.dart' show startOnlineGame;
+export '/custom_code/actions/start_round_online.dart' show startRoundOnline;
+export '/custom_code/actions/add_stroke_online.dart' show addStrokeOnline;
+export '/custom_code/actions/submit_guess_online.dart' show submitGuessOnline;

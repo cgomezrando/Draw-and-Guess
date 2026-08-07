@@ -84,13 +84,13 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
       refreshListenable: appStateNotifier,
       navigatorKey: appNavigatorKey,
       errorBuilder: (context, state) =>
-          appStateNotifier.loggedIn ? LobbyPageWidget() : HomePageWidget(),
+          appStateNotifier.loggedIn ? HomePageWidget() : SplashPageWidget(),
       routes: [
         FFRoute(
           name: '_initialize',
           path: '/',
           builder: (context, _) =>
-              appStateNotifier.loggedIn ? LobbyPageWidget() : HomePageWidget(),
+              appStateNotifier.loggedIn ? HomePageWidget() : SplashPageWidget(),
         ),
         FFRoute(
           name: HomePageWidget.routeName,
@@ -116,6 +116,16 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: LocalPairsGamePageWidget.routeName,
           path: LocalPairsGamePageWidget.routePath,
           builder: (context, params) => LocalPairsGamePageWidget(),
+        ),
+        FFRoute(
+          name: SplashPageWidget.routeName,
+          path: SplashPageWidget.routePath,
+          builder: (context, params) => SplashPageWidget(),
+        ),
+        FFRoute(
+          name: OnlineGamePageWidget.routeName,
+          path: OnlineGamePageWidget.routePath,
+          builder: (context, params) => OnlineGamePageWidget(),
         )
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );
@@ -288,7 +298,7 @@ class FFRoute {
 
           if (requireAuth && !appStateNotifier.loggedIn) {
             appStateNotifier.setRedirectLocationIfUnset(state.uri.toString());
-            return '/homePage';
+            return '/splashPage';
           }
           return null;
         },

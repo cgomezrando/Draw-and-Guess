@@ -6,28 +6,28 @@ import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'lobby_page_model.dart';
-export 'lobby_page_model.dart';
+import 'online_game_page_model.dart';
+export 'online_game_page_model.dart';
 
-class LobbyPageWidget extends StatefulWidget {
-  const LobbyPageWidget({super.key});
+class OnlineGamePageWidget extends StatefulWidget {
+  const OnlineGamePageWidget({super.key});
 
-  static String routeName = 'LobbyPage';
-  static String routePath = '/lobbyPage';
+  static String routeName = 'OnlineGamePage';
+  static String routePath = '/onlineGamePage';
 
   @override
-  State<LobbyPageWidget> createState() => _LobbyPageWidgetState();
+  State<OnlineGamePageWidget> createState() => _OnlineGamePageWidgetState();
 }
 
-class _LobbyPageWidgetState extends State<LobbyPageWidget> {
-  late LobbyPageModel _model;
+class _OnlineGamePageWidgetState extends State<OnlineGamePageWidget> {
+  late OnlineGamePageModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => LobbyPageModel());
+    _model = createModel(context, () => OnlineGamePageModel());
   }
 
   @override
@@ -46,16 +46,19 @@ class _LobbyPageWidgetState extends State<LobbyPageWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: Colors.white,
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          child: custom_widgets.LobbyView(
+        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        body: SafeArea(
+          top: true,
+          child: Container(
             width: double.infinity,
             height: double.infinity,
-            onStart: () async {
-              context.pushNamed(OnlineGamePageWidget.routeName);
-            },
+            child: custom_widgets.OnlineGame(
+              width: double.infinity,
+              height: double.infinity,
+              onFinish: () async {
+                context.pushNamed(ResultsPageWidget.routeName);
+              },
+            ),
           ),
         ),
       ),
