@@ -108,11 +108,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => LocalGamePageWidget(),
         ),
         FFRoute(
-          name: ResultsPageWidget.routeName,
-          path: ResultsPageWidget.routePath,
-          builder: (context, params) => ResultsPageWidget(),
-        ),
-        FFRoute(
           name: LocalPairsGamePageWidget.routeName,
           path: LocalPairsGamePageWidget.routePath,
           builder: (context, params) => LocalPairsGamePageWidget(),
@@ -126,6 +121,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: OnlineGamePageWidget.routeName,
           path: OnlineGamePageWidget.routePath,
           builder: (context, params) => OnlineGamePageWidget(),
+        ),
+        FFRoute(
+          name: LocalAiGamePageWidget.routeName,
+          path: LocalAiGamePageWidget.routePath,
+          builder: (context, params) => LocalAiGamePageWidget(),
         )
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );

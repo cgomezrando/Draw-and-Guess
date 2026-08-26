@@ -11,19 +11,26 @@ import 'package:flutter/material.dart';
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 // ============================================================================
-//  LocalGame  —  Modo CLÁSICO local (uno dibuja, el resto adivina en voz alta)
-//  Flujo: handoff → showword → ready → drawing(cuenta atrás) → timeup/reveal
-//  Cuenta atrás con AnimationController (no requiere imports extra).
+//  LocalAiGame  —  Modo RETO IA local
+//  Cada jugador dibuja SU palabra (distinta). Al terminar, GPT-4o-mini puntúa
+//  el dibujo 0-100. Al final, ranking; gana el % más alto.
+//  Flujo: handoff → showword → ready → drawing(cuenta atrás) → scoring → result
+//         → (siguiente jugador…) → showResults (diálogo con medallas)
+//  Cuenta atrás con AnimationController (sin imports extra).
+//  Requiere: Custom Action scoreDrawingAi(List<String>, String)→AiResultStruct
+//            App State openaiKey (String) y localSeconds (int).
+//  NOTA: la captura de imagen se hace en la Action (dart:ui), no aquí, para
+//  evitar los tipos RenderRepaintBoundary/ImageByteFormat que FF no expone.
 // ============================================================================
 
-class LocalGame extends StatefulWidget {
-  const LocalGame({Key? key, this.width, this.height}) : super(key: key);
+class LocalAiGame extends StatefulWidget {
+  const LocalAiGame({Key? key, this.width, this.height}) : super(key: key);
 
   final double? width;
   final double? height;
 
   @override
-  State<LocalGame> createState() => _LocalGameState();
+  State<LocalAiGame> createState() => _LocalAiGameState();
 }
 
 // ---- Paleta -----------------------------------------------------------------
@@ -31,15 +38,14 @@ const Color _green = Color(0xFF19C08B);
 const Color _navy = Color(0xFF203A5C);
 const Color _ink = Color(0xFF213047);
 const Color _muted = Color(0xFF6B7280);
-const Color _blue = Color(0xFF4C9AF5); // 👀 pásale la tablet
-const Color _orange = Color(0xFFF5A623); // ✏️ (libre)
-const Color _teal = Color(0xFF17BEBB); // 🤫 tu palabra
-const Color _purple = Color(0xFF6C5CE7); // 🔄 siguiente jugador
-const Color _red = Color(0xFFEF6C5A); // ⏰ se acabó el tiempo
+const Color _blue = Color(0xFF4C9AF5);
+const Color _orange = Color(0xFFF5A623); // acento Reto IA
+const Color _purple = Color(0xFF6C5CE7);
+const Color _red = Color(0xFFEF6C5A);
+const Color _teal = Color(0xFF17BEBB);
+const Color _yellow = Color(0xFFF5B301);
 
-const Color _yellow = Color(0xFFF5B301); // 💡 la palabra era
-
-enum _Phase { handoff, showword, ready, drawing, timeup, reveal }
+enum _Phase { handoff, showword, ready, drawing, scoring, result }
 
 class _Stroke {
   _Stroke(this.color, this.width);
@@ -48,64 +54,37 @@ class _Stroke {
   final List<Offset> pts = []; // normalizados 0..1
 }
 
-class _LocalGameState extends State<LocalGame>
+class _LocalAiGameState extends State<LocalAiGame>
     with SingleTickerProviderStateMixin {
   _Phase _phase = _Phase.handoff;
-  String _word = '';
   final List<_Stroke> _strokes = [];
   Color _penColor = _navy;
 
   late final AnimationController _ctrl;
-  int _seconds = 60; // duración elegida (configurable)
+  int _seconds = 60;
   int _left = 60;
 
-  final Map<int, int> _scores = {}; // puntos por jugador (índice)
-  int? _awardedTo; // a quién se dio el punto en este turno (null = sin elegir)
+  int _idx = 0;
+  List<String> _names = [];
+  List<String> _words = [];
+  List<AiResultStruct?> _results = [];
 
-  // -------- Estado de jugadores (defensivo) ----------------------------------
-  // Cada elemento de localPlayers es un LocalPlayerStruct → usamos su .name.
-  List<String> get _players {
-    try {
-      final raw = FFAppState().localPlayers as List;
-      final names = raw.map((e) {
-        try {
-          return ((e as dynamic).name as String);
-        } catch (_) {
-          return e.toString();
-        }
-      }).toList();
-      if (names.isNotEmpty) return names;
-    } catch (_) {}
-    return ['Jugador 1', 'Jugador 2'];
-  }
-
-  int get _drawerIndex {
-    try {
-      final i = FFAppState().localDrawerIndex as int;
-      return i % _players.length;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  int get _round {
-    try {
-      return FFAppState().localRound as int;
-    } catch (_) {
-      return 1;
-    }
-  }
-
-  String get _drawer => _players[_drawerIndex];
+  String get _player =>
+      (_idx >= 0 && _idx < _names.length) ? _names[_idx] : '—';
+  String get _word => (_idx >= 0 && _idx < _words.length) ? _words[_idx] : '';
 
   @override
   void initState() {
     super.initState();
-    // Tiempo elegido en la pantalla de selección (App State: localSeconds).
     try {
       final s = FFAppState().localSeconds as int;
       if (s > 0) _seconds = s;
     } catch (_) {}
+
+    _names = _readNames();
+    _words = _buildWords(_names.length);
+    _results = List<AiResultStruct?>.generate(_names.length, (_) => null);
+
     _ctrl = AnimationController(
       vsync: this,
       duration: Duration(seconds: _seconds),
@@ -120,29 +99,45 @@ class _LocalGameState extends State<LocalGame>
     super.dispose();
   }
 
+  List<String> _readNames() {
+    try {
+      final raw = FFAppState().localPlayers as List;
+      final names = raw
+          .map((e) {
+            try {
+              return ((e as dynamic).name as String);
+            } catch (_) {
+              return e.toString();
+            }
+          })
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+      if (names.isNotEmpty) return names;
+    } catch (_) {}
+    return ['Jugador 1', 'Jugador 2'];
+  }
+
+  List<String> _buildWords(int n) {
+    List<String> pool;
+    try {
+      pool = wordsForLevel(FFAppState().difficulty);
+    } catch (_) {
+      pool = const ['gato', 'perro', 'sol', 'casa', 'árbol', 'luna', 'pez'];
+    }
+    if (pool.isEmpty) pool = const ['gato', 'perro', 'sol', 'casa'];
+    final base = DateTime.now().microsecondsSinceEpoch % pool.length;
+    return List<String>.generate(n, (i) => pool[(base + i) % pool.length]);
+  }
+
   void _onTick() {
     final rem = (_seconds - _seconds * _ctrl.value).ceil();
     if (rem != _left && rem >= 0) setState(() => _left = rem);
   }
 
   void _onStatus(AnimationStatus s) {
-    if (s == AnimationStatus.completed && mounted) {
-      setState(() => _phase = _Phase.timeup);
+    if (s == AnimationStatus.completed && _phase == _Phase.drawing) {
+      _captureAndScore();
     }
-  }
-
-  // -------- Lógica -----------------------------------------------------------
-  void _pickWord() {
-    List<String> pool;
-    try {
-      pool = wordsForLevel(FFAppState().difficulty);
-    } catch (_) {
-      pool = const ['gato', 'perro', 'sol', 'casa', 'árbol'];
-    }
-    if (pool.isEmpty) pool = const ['gato', 'perro', 'sol'];
-    // pseudo-aleatorio sin dart:math (evita imports extra)
-    final seed = DateTime.now().microsecondsSinceEpoch;
-    _word = pool[seed % pool.length];
   }
 
   void _startTimer() {
@@ -151,26 +146,63 @@ class _LocalGameState extends State<LocalGame>
     _ctrl.forward(from: 0);
   }
 
-  void _nextDrawer() {
+  // Serializa los trazos a "RRGGBB:x1,y1;x2,y2;..." (sin imports especiales)
+  List<String> _serializeStrokes() {
+    final out = <String>[];
+    for (final s in _strokes) {
+      final hex = (s.color.value & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+      final b = StringBuffer(hex);
+      b.write(':');
+      for (final p in s.pts) {
+        b.write(p.dx.toStringAsFixed(4));
+        b.write(',');
+        b.write(p.dy.toStringAsFixed(4));
+        b.write(';');
+      }
+      out.add(b.toString());
+    }
+    return out;
+  }
+
+  Future<void> _captureAndScore() async {
     _ctrl.stop();
-    final n = _players.length;
-    final nextIdx = (_drawerIndex + 1) % n;
+    if (_phase == _Phase.scoring) return; // evita doble llamada
+    setState(() => _phase = _Phase.scoring);
+    AiResultStruct res;
     try {
-      FFAppState().update(() {
-        FFAppState().localDrawerIndex = nextIdx;
-        if (nextIdx == 0) FFAppState().localRound = _round + 1;
-      });
-    } catch (_) {}
+      res = await scoreDrawingAi(_serializeStrokes(), _word);
+    } catch (e) {
+      res = AiResultStruct(score: -1, guess: '', reason: 'Error: $e');
+    }
+    if (!mounted) return;
     setState(() {
-      _strokes.clear();
-      _word = '';
-      _awardedTo = null;
-      _phase = _Phase.handoff;
+      _results[_idx] = res;
+      _phase = _Phase.result;
     });
   }
 
-  // ==========================================================================
-  //  BUILD
+  void _next() {
+    if (_idx < _names.length - 1) {
+      setState(() {
+        _idx++;
+        _strokes.clear();
+        _phase = _Phase.handoff;
+      });
+    } else {
+      _finish();
+    }
+  }
+
+  Future<void> _finish() async {
+    final names = List<String>.from(_names);
+    final scores = List<int>.generate(_names.length, (i) {
+      final s = _results[i]?.score ?? 0;
+      return s < 0 ? 0 : s;
+    });
+    await showResults(context, names, scores);
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
   // ==========================================================================
   @override
   Widget build(BuildContext context) {
@@ -191,14 +223,14 @@ class _LocalGameState extends State<LocalGame>
         return _ready();
       case _Phase.drawing:
         return _drawing();
-      case _Phase.timeup:
-        return _timeup();
-      case _Phase.reveal:
-        return _reveal();
+      case _Phase.scoring:
+        return _scoring();
+      case _Phase.result:
+        return _result();
     }
   }
 
-  // -------- Fondo con doodles dispersos --------------------------------------
+  // -------- Fondo -----------------------------------------------------------
   Widget _bg(Widget child) {
     return Container(
       decoration: const BoxDecoration(
@@ -230,7 +262,7 @@ class _LocalGameState extends State<LocalGame>
     ];
     return LayoutBuilder(
       builder: (ctx, c) {
-        const cell = 64.0; // densidad; el jitter rompe las líneas rectas
+        const cell = 64.0;
         final w = c.maxWidth.isFinite ? c.maxWidth : 400.0;
         final h = c.maxHeight.isFinite ? c.maxHeight : 800.0;
         final cols = (w / cell).ceil() + 1;
@@ -238,12 +270,11 @@ class _LocalGameState extends State<LocalGame>
         final items = <Widget>[];
         for (int r = 0; r < rows; r++) {
           for (int col = 0; col < cols; col++) {
-            // hash determinista por celda → posición/rotación/tamaño "aleatorios"
             final hsh = ((r * 73856093) ^ (col * 19349663)) & 0x7fffffff;
-            final jx = (hsh % 1000) / 1000.0; // 0..1 dentro de la celda
+            final jx = (hsh % 1000) / 1000.0;
             final jy = ((hsh >> 10) % 1000) / 1000.0;
-            final rot = ((hsh >> 20) % 1000) / 1000.0 * 6.28318; // 0..2π
-            final sz = 45.0 + (hsh >> 5) % 45; // triple: 45..89
+            final rot = ((hsh >> 20) % 1000) / 1000.0 * 6.28318;
+            final sz = 45.0 + (hsh >> 5) % 45; // triple
             final ic = icons[hsh % icons.length];
             final left = col * cell + jx * cell - cell / 2;
             final top = r * cell + jy * cell - cell / 2;
@@ -252,11 +283,7 @@ class _LocalGameState extends State<LocalGame>
               top: top,
               child: Transform.rotate(
                 angle: rot,
-                child: Icon(
-                  ic,
-                  size: sz,
-                  color: _navy.withOpacity(0.06),
-                ),
+                child: Icon(ic, size: sz, color: _navy.withOpacity(0.06)),
               ),
             ));
           }
@@ -267,8 +294,31 @@ class _LocalGameState extends State<LocalGame>
   }
 
   // -------- Tarjeta central --------------------------------------------------
+  // Cabeza de IA: robot con un cerebro encima (superpuestos)
+  Widget _aiHead(double s) {
+    return SizedBox(
+      width: s * 1.25,
+      height: s * 1.45,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            bottom: 0,
+            child: Text('🤖', style: TextStyle(fontSize: s)),
+          ),
+          Positioned(
+            top: 0,
+            child: Text('🧠', style: TextStyle(fontSize: s * 0.6)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _centerCard({
-    required String emoji,
+    String emoji = '',
+    Widget? emojiWidget,
     required Color badge,
     required List<Widget> children,
   }) {
@@ -312,7 +362,8 @@ class _LocalGameState extends State<LocalGame>
                     ],
                   ),
                   alignment: Alignment.center,
-                  child: Text(emoji, style: const TextStyle(fontSize: 96)),
+                  child: emojiWidget ??
+                      Text(emoji, style: const TextStyle(fontSize: 96)),
                 ),
                 const SizedBox(height: 24),
                 ...children,
@@ -324,30 +375,25 @@ class _LocalGameState extends State<LocalGame>
     );
   }
 
-  Widget _roundPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-      decoration: BoxDecoration(
-        color: _green.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Text(
-        'Ronda $_round · Turno ${_drawerIndex + 1} de ${_players.length}',
-        style: const TextStyle(
-            fontSize: 16, fontWeight: FontWeight.w800, color: _green),
-      ),
-    );
-  }
+  Widget _pill(String t, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+        decoration: BoxDecoration(
+          color: c.withOpacity(0.14),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Text(t,
+            style:
+                TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c)),
+      );
 
   Widget _title(String t) => Text(
         t,
         textAlign: TextAlign.center,
         style: const TextStyle(
-          fontSize: 30,
-          fontWeight: FontWeight.w800,
-          color: _ink,
-          height: 1.1,
-        ),
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: _ink,
+            height: 1.1),
       );
 
   Widget _subtitle(String t) => Text(
@@ -356,47 +402,58 @@ class _LocalGameState extends State<LocalGame>
         style: const TextStyle(fontSize: 15.5, color: _muted, height: 1.35),
       );
 
-  Widget _btn(String label, Color color, VoidCallback onTap) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  Widget _btn(String label, Color color, VoidCallback onTap) => SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onTap,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          child: Text(label,
+              style:
+                  const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800)),
         ),
-        child: Text(label,
-            style:
-                const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800)),
-      ),
-    );
-  }
+      );
 
-  // -------- Pantallas de paso ------------------------------------------------
+  Widget _wordBox(String w, Color color) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.6), width: 2),
+        ),
+        child: Text(
+          w.toUpperCase(),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 26, fontWeight: FontWeight.w900, color: color),
+        ),
+      );
+
+  // -------- Pantallas --------------------------------------------------------
   Widget _handoff() {
     return _centerCard(
-      emoji: '👀',
-      badge: _blue,
+      emojiWidget: _aiHead(84),
+      badge: _teal,
       children: [
-        _roundPill(),
+        _pill('Jugador ${_idx + 1} de ${_names.length}', _teal),
         const SizedBox(height: 14),
-        _title('Pásale la tablet'),
+        _title('Reto IA'),
         const SizedBox(height: 10),
-        Text(
-          _drawer,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-              fontSize: 20, fontWeight: FontWeight.w800, color: _blue),
-        ),
+        Text(_player,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w800, color: _teal)),
         const SizedBox(height: 6),
-        _subtitle('Que el resto de jugadores no mire.'),
+        _subtitle('Tú tienes tu propia palabra. La IA puntuará tu dibujo.'),
         const SizedBox(height: 22),
         _btn('Ver mi palabra', _green, () {
-          _pickWord();
           setState(() => _phase = _Phase.showword);
         }),
       ],
@@ -410,25 +467,9 @@ class _LocalGameState extends State<LocalGame>
       children: [
         _title('Tu palabra es…'),
         const SizedBox(height: 18),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-          decoration: BoxDecoration(
-            color: _teal.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _teal.withOpacity(0.6), width: 2),
-          ),
-          child: Text(
-            _word.toUpperCase(),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF0E8C8A)),
-          ),
-        ),
+        _wordBox(_word, _teal),
         const SizedBox(height: 14),
-        _subtitle('No se la enseñes a los demás.'),
+        _subtitle('Dibújala lo mejor posible para convencer a la IA.'),
         const SizedBox(height: 22),
         _btn('¡Entendido!', _green, () {
           setState(() => _phase = _Phase.ready);
@@ -444,25 +485,7 @@ class _LocalGameState extends State<LocalGame>
       children: [
         _title('Ya puedes dibujar'),
         const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: _green.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('⏱️', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              Text('Tienes $_seconds segundos',
-                  style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: _green)),
-            ],
-          ),
-        ),
+        _pill('⏱️  Tienes $_seconds segundos', _green),
         const SizedBox(height: 22),
         _btn('¡Empezar!', _green, () {
           setState(() => _phase = _Phase.drawing);
@@ -472,110 +495,59 @@ class _LocalGameState extends State<LocalGame>
     );
   }
 
-  Widget _timeup() {
+  Widget _scoring() {
     return _centerCard(
-      emoji: '⏰',
-      badge: _red,
+      emojiWidget: _aiHead(84),
+      badge: _teal,
       children: [
-        _title('¡Se acabó el tiempo!'),
-        const SizedBox(height: 10),
-        _subtitle('Veamos las respuestas.'),
-        const SizedBox(height: 22),
-        _btn('Continuar', _green, () {
-          setState(() => _phase = _Phase.reveal);
-        }),
-      ],
-    );
-  }
-
-  Widget _reveal() {
-    return _centerCard(
-      emoji: '💡',
-      badge: _yellow,
-      children: [
-        _title('La palabra era'),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-          decoration: BoxDecoration(
-            color: _yellow.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _yellow.withOpacity(0.6), width: 2),
-          ),
-          child: Text(
-            _word.toUpperCase(),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFFB07D00)),
-          ),
-        ),
+        _title('La IA está mirando…'),
         const SizedBox(height: 18),
-        _subtitle('¿Quién la adivinó? (le suma 1 punto)'),
-        const SizedBox(height: 12),
-        _winnerChips(),
-        const SizedBox(height: 20),
-        _btn('Siguiente jugador', _purple, _nextDrawer),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () async {
-            final names = List<String>.from(_players);
-            final scores =
-                List<int>.generate(_players.length, (i) => _scores[i] ?? 0);
-            await showResults(context, names, scores);
-          },
-          child: const Text('Terminar y ver resultados',
-              style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
-        ),
+        const CircularProgressIndicator(color: _teal),
+        const SizedBox(height: 18),
+        _subtitle('Analizando tu obra de arte.'),
       ],
     );
   }
 
-  Widget _winnerChips() {
-    final chips = <Widget>[];
-    for (int i = 0; i < _players.length; i++) {
-      if (i == _drawerIndex) continue; // el dibujante no adivina
-      chips.add(_awardChip(_players[i], i));
-    }
-    chips.add(_awardChip('Nadie', -1));
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: chips,
-    );
-  }
-
-  Widget _awardChip(String label, int idx) {
-    final sel = _awardedTo == idx;
-    return GestureDetector(
-      onTap: () => setState(() {
-        // deshacer el punto anterior de este turno si lo había
-        if (_awardedTo != null && _awardedTo! >= 0) {
-          _scores[_awardedTo!] = (_scores[_awardedTo!] ?? 0) - 1;
-        }
-        _awardedTo = idx;
-        if (idx >= 0) _scores[idx] = (_scores[idx] ?? 0) + 1;
-      }),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: sel ? _green : const Color(0xFFF3F4F6),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-              color: sel ? _green : const Color(0xFFE2E5EA), width: 2),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w800,
-            color: sel ? Colors.white : _ink,
+  Widget _result() {
+    final r = _results[_idx];
+    final score = r?.score ?? 0;
+    final error = score < 0;
+    final col =
+        error ? _red : (score >= 70 ? _green : (score >= 40 ? _orange : _red));
+    return _centerCard(
+      emoji: error ? '⚠️' : (score >= 70 ? '🎉' : '🖼️'),
+      badge: col,
+      children: [
+        if (error) ...[
+          _title('Ups…'),
+          const SizedBox(height: 12),
+          _subtitle(r?.reason ?? 'No se pudo puntuar.'),
+        ] else ...[
+          _title('$score%'),
+          const SizedBox(height: 6),
+          _subtitle('de parecido con «${_word.toUpperCase()}»'),
+          const SizedBox(height: 14),
+          if ((r?.guess ?? '').isNotEmpty)
+            Text('La IA vio: ${r!.guess}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700, color: _ink)),
+          const SizedBox(height: 6),
+          if ((r?.reason ?? '').isNotEmpty) _subtitle(r!.reason),
+        ],
+        const SizedBox(height: 22),
+        _btn(_idx < _names.length - 1 ? 'Siguiente jugador' : 'Ver resultados',
+            _purple, _next),
+        if (error) ...[
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => setState(() => _phase = _Phase.drawing),
+            child: const Text('Reintentar dibujo',
+                style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
           ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 
@@ -585,7 +557,6 @@ class _LocalGameState extends State<LocalGame>
     return SafeArea(
       child: Column(
         children: [
-          // Cabecera bonita
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Row(
@@ -606,9 +577,9 @@ class _LocalGameState extends State<LocalGame>
                     ),
                     child: Row(
                       children: [
-                        const Text('🎨', style: TextStyle(fontSize: 22)),
+                        _aiHead(20),
                         const SizedBox(width: 10),
-                        const Text('Dibujando:',
+                        const Text('Dibuja:',
                             style: TextStyle(
                                 fontSize: 16,
                                 color: _muted,
@@ -616,7 +587,7 @@ class _LocalGameState extends State<LocalGame>
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            _drawer,
+                            _word.toUpperCase(),
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 18,
@@ -629,7 +600,6 @@ class _LocalGameState extends State<LocalGame>
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Cuenta atrás
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -659,7 +629,6 @@ class _LocalGameState extends State<LocalGame>
               ],
             ),
           ),
-          // Lienzo
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -706,7 +675,6 @@ class _LocalGameState extends State<LocalGame>
               ),
             ),
           ),
-          // Herramientas
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
             child: Wrap(
@@ -737,10 +705,8 @@ class _LocalGameState extends State<LocalGame>
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-            child: _btn('Terminé · ¡A puntuar!', _green, () {
-              _ctrl.stop();
-              setState(() => _phase = _Phase.reveal);
-            }),
+            child:
+                _btn('Terminé · ¡Que puntúe la IA!', _teal, _captureAndScore),
           ),
         ],
       ),

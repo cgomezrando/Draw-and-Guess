@@ -58,7 +58,6 @@ class _LocalGamePageWidgetState extends State<LocalGamePageWidget> {
               child: custom_widgets.LocalGame(
                 width: double.infinity,
                 height: double.infinity,
-                onGameEnd: () async {},
               ),
             ),
           ),

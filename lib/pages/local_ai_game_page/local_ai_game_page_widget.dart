@@ -5,29 +5,28 @@ import '/custom_code/widgets/index.dart' as custom_widgets;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'local_pairs_game_page_model.dart';
-export 'local_pairs_game_page_model.dart';
+import 'local_ai_game_page_model.dart';
+export 'local_ai_game_page_model.dart';
 
-class LocalPairsGamePageWidget extends StatefulWidget {
-  const LocalPairsGamePageWidget({super.key});
+class LocalAiGamePageWidget extends StatefulWidget {
+  const LocalAiGamePageWidget({super.key});
 
-  static String routeName = 'LocalPairsGamePage';
-  static String routePath = '/localPairsGamePage';
+  static String routeName = 'LocalAiGamePage';
+  static String routePath = '/localAiGamePage';
 
   @override
-  State<LocalPairsGamePageWidget> createState() =>
-      _LocalPairsGamePageWidgetState();
+  State<LocalAiGamePageWidget> createState() => _LocalAiGamePageWidgetState();
 }
 
-class _LocalPairsGamePageWidgetState extends State<LocalPairsGamePageWidget> {
-  late LocalPairsGamePageModel _model;
+class _LocalAiGamePageWidgetState extends State<LocalAiGamePageWidget> {
+  late LocalAiGamePageModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
-    _model = createModel(context, () => LocalPairsGamePageModel());
+    _model = createModel(context, () => LocalAiGamePageModel());
   }
 
   @override
@@ -46,20 +45,15 @@ class _LocalPairsGamePageWidgetState extends State<LocalPairsGamePageWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: Colors.white,
-        body: Align(
-          alignment: AlignmentDirectional(0.0, 0.0),
+        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        body: SafeArea(
+          top: true,
           child: Container(
             width: double.infinity,
             height: double.infinity,
-            decoration: BoxDecoration(),
-            child: Container(
+            child: custom_widgets.LocalAiGame(
               width: double.infinity,
               height: double.infinity,
-              child: custom_widgets.LocalPairsGame(
-                width: double.infinity,
-                height: double.infinity,
-              ),
             ),
           ),
         ),

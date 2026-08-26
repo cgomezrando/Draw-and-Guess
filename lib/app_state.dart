@@ -118,6 +118,25 @@ class FFAppState extends ChangeNotifier {
   set localWord(String value) {
     _localWord = value;
   }
+
+  String _difficulty = 'facil';
+  String get difficulty => _difficulty;
+  set difficulty(String value) {
+    _difficulty = value;
+  }
+
+  int _localSeconds = 30;
+  int get localSeconds => _localSeconds;
+  set localSeconds(int value) {
+    _localSeconds = value;
+  }
+
+  String _openaiKey =
+      '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';
+  String get openaiKey => _openaiKey;
+  set openaiKey(String value) {
+    _openaiKey = value;
+  }
 }
 
 Color? _colorFromIntValue(int? val) {

@@ -49,13 +49,12 @@ class _HomePageWidgetState extends State<HomePageWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         body: Align(
           alignment: AlignmentDirectional(0.0, -1.0),
           child: Stack(
             children: [
               Align(
-                alignment: AlignmentDirectional(0.0, -1.0),
+                alignment: AlignmentDirectional(0.0, 0.0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8.0),
                   child: CachedNetworkImage(
@@ -99,8 +98,8 @@ class _HomePageWidgetState extends State<HomePageWidget> {
                                     .pushNamed(LocalGamePageWidget.routeName);
                               } else {
                                 if (_model.localChoice == 'ai') {
-                                  context
-                                      .pushNamed(LocalGamePageWidget.routeName);
+                                  context.pushNamed(
+                                      LocalAiGamePageWidget.routeName);
                                 }
                               }
                             }

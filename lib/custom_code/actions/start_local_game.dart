@@ -4,6 +4,7 @@ import '/backend/schema/structs/index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/custom_code/actions/index.dart'; // Imports other custom actions
+import '/flutter_flow/custom_functions.dart'; // Imports custom functions
 import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
@@ -74,26 +75,107 @@ Future<String> startLocalGame(BuildContext context) async {
         child: child,
       );
 
-  Future<String?> chooseMode() {
-    Widget modeCard(Color color, IconData icon, String title, String sub,
-        String value, BuildContext ctx) {
-      return InkWell(
-        onTap: () => Navigator.pop(ctx, value),
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withOpacity(0.35), width: 1.5),
+  // Selector de dificultad reutilizable
+  Widget diffChips(String current, void Function(String) onPick) {
+    final opts = [
+      ['facil', 'Fácil', green],
+      ['medio', 'Medio', purple],
+      ['dificil', 'Difícil', orange],
+    ];
+    return Row(
+      children: opts.map((o) {
+        final val = o[0] as String;
+        final label = o[1] as String;
+        final col = o[2] as Color;
+        final sel = val == current;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () => onPick(val),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: sel ? col : const Color(0xFFF3F5F8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(label,
+                    style: TextStyle(
+                        color: sel ? Colors.white : navy,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
           ),
-          child: Row(
-            children: [
+        );
+      }).toList(),
+    );
+  }
+
+  // Selector de tiempo de dibujo (segundos)
+  Widget timeChips(int current, void Function(int) onPick) {
+    final opts = [30, 60, 90];
+    return Row(
+      children: opts.map((s) {
+        final sel = s == current;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () => onPick(s),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: sel ? green : const Color(0xFFF3F5F8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('${s}s',
+                    style: TextStyle(
+                        color: sel ? Colors.white : navy,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  String initialLevel() {
+    final d = FFAppState().difficulty;
+    return ['facil', 'medio', 'dificil'].contains(d) ? d : 'facil';
+  }
+
+  int initialSeconds() {
+    try {
+      final s = FFAppState().localSeconds;
+      if (s == 30 || s == 60 || s == 90) return s;
+    } catch (_) {}
+    return 60;
+  }
+
+  Future<String?> chooseMode() {
+    Widget card(Color c, IconData icon, String t, String s, String v,
+            BuildContext ctx) =>
+        InkWell(
+          onTap: () => Navigator.pop(ctx, v),
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: c.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: c.withOpacity(0.35), width: 1.5),
+            ),
+            child: Row(children: [
               Container(
                 width: 52,
                 height: 52,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: c, shape: BoxShape.circle),
                 child: Icon(icon, color: Colors.white, size: 28),
               ),
               const SizedBox(width: 14),
@@ -101,25 +183,22 @@ Future<String> startLocalGame(BuildContext context) async {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
+                    Text(t,
                         style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
                             color: navy)),
                     const SizedBox(height: 2),
-                    Text(sub,
+                    Text(s,
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey.shade600)),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: color),
-            ],
+              Icon(Icons.chevron_right, color: c),
+            ]),
           ),
-        ),
-      );
-    }
-
+        );
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -135,13 +214,12 @@ Future<String> startLocalGame(BuildContext context) async {
                 style: TextStyle(
                     fontSize: 20, fontWeight: FontWeight.bold, color: navy)),
             const SizedBox(height: 16),
-            modeCard(green, Icons.groups_rounded, 'Clásico',
+            card(green, Icons.groups_rounded, 'Clásico',
                 'Uno dibuja, todos adivinan', 'multi', ctx),
-            modeCard(purple, Icons.people_alt_rounded, 'Parejas',
+            card(purple, Icons.people_alt_rounded, 'Parejas',
                 'Dibuja uno, adivina su pareja', 'pairs', ctx),
-            modeCard(orange, Icons.auto_awesome_rounded, 'Reto IA',
+            card(orange, Icons.auto_awesome_rounded, 'Reto IA',
                 'Dibuja y que la IA lo adivine', 'ai', ctx),
-            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -151,6 +229,8 @@ Future<String> startLocalGame(BuildContext context) async {
   Future<bool> setupPlayers(String mode) async {
     const int maxCount = 4;
     int count = mode == 'ai' ? 1 : 2;
+    var level = initialLevel();
+    var seconds = initialSeconds();
     final ctrls = List.generate(maxCount, (_) => TextEditingController());
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -172,13 +252,31 @@ Future<String> startLocalGame(BuildContext context) async {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   handle(),
+                  const Text('Dificultad',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  diffChips(level, (v) => setSt(() => level = v)),
+                  const SizedBox(height: 18),
+                  const Text('Tiempo para dibujar',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  timeChips(seconds, (v) => setSt(() => seconds = v)),
+                  const SizedBox(height: 18),
                   const Text('¿Cuántos jugadores?',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: navy)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Row(
                     children: List.generate(maxCount, (i) {
                       final n = i + 1;
@@ -198,10 +296,9 @@ Future<String> startLocalGame(BuildContext context) async {
                               ),
                               child: Text('$n',
                                   style: TextStyle(
-                                    color: sel ? Colors.white : navy,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  )),
+                                      color: sel ? Colors.white : navy,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ),
@@ -239,6 +336,8 @@ Future<String> startLocalGame(BuildContext context) async {
       FFAppState().update(() {
         FFAppState().localPlayers = players;
         FFAppState().localMode = mode;
+        FFAppState().difficulty = level;
+        FFAppState().localSeconds = seconds;
         FFAppState().localDrawerIndex = 0;
         FFAppState().localRound = 1;
       });
@@ -252,6 +351,8 @@ Future<String> startLocalGame(BuildContext context) async {
   Future<bool> setupPairs() async {
     const int maxPairs = 4;
     int count = 2;
+    var level = initialLevel();
+    var seconds = initialSeconds();
     final a = List.generate(maxPairs, (_) => TextEditingController());
     final b = List.generate(maxPairs, (_) => TextEditingController());
     final ok = await showModalBottomSheet<bool>(
@@ -276,13 +377,31 @@ Future<String> startLocalGame(BuildContext context) async {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   handle(),
+                  const Text('Dificultad',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  diffChips(level, (v) => setSt(() => level = v)),
+                  const SizedBox(height: 18),
+                  const Text('Tiempo para dibujar',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  timeChips(seconds, (v) => setSt(() => seconds = v)),
+                  const SizedBox(height: 18),
                   const Text('¿Cuántas parejas?',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: navy)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Row(
                     children: List.generate(maxPairs, (i) {
                       final n = i + 1;
@@ -303,12 +422,11 @@ Future<String> startLocalGame(BuildContext context) async {
                               ),
                               child: Text('$n',
                                   style: TextStyle(
-                                    color: sel
-                                        ? Colors.white
-                                        : (dis ? Colors.grey.shade400 : navy),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  )),
+                                      color: sel
+                                          ? Colors.white
+                                          : (dis ? Colors.grey.shade400 : navy),
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ),
@@ -362,6 +480,8 @@ Future<String> startLocalGame(BuildContext context) async {
       FFAppState().update(() {
         FFAppState().localPlayers = pairs;
         FFAppState().localMode = 'pairs';
+        FFAppState().difficulty = level;
+        FFAppState().localSeconds = seconds;
         FFAppState().localDrawerIndex = 0;
         FFAppState().localRound = 1;
       });

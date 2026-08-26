@@ -7,3 +7,5 @@ export '/custom_code/actions/start_online_game.dart' show startOnlineGame;
 export '/custom_code/actions/start_round_online.dart' show startRoundOnline;
 export '/custom_code/actions/add_stroke_online.dart' show addStrokeOnline;
 export '/custom_code/actions/submit_guess_online.dart' show submitGuessOnline;
+export '/custom_code/actions/score_drawing_ai.dart' show scoreDrawingAi;
+export '/custom_code/actions/show_results.dart' show showResults;
