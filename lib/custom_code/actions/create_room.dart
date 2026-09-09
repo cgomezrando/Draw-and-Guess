@@ -15,6 +15,7 @@ Future<DocumentReference> createRoom(
   String mode,
   DocumentReference hostRef,
   String displayName,
+  String difficulty,
 ) async {
   final db = FirebaseFirestore.instance;
   final code = await generateRoomCode(); // reutiliza la action anterior
@@ -22,9 +23,11 @@ Future<DocumentReference> createRoom(
   final roomRef = await db.collection('rooms').add({
     'code': code,
     'mode': mode,
+    'difficulty': difficulty, // 'facil' | 'medio' | 'dificil'
     'status': 'lobby',
     'hostRef': hostRef,
     'currentDrawerRef': null,
+    'currentDrawerName': '',
     'currentWord': '',
     'wordOptions': <String>[],
     'currentRound': 0,

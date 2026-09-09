@@ -17,6 +17,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'dart:math';
 
+// ============================================================================
+//  OnlineGame  —  ronda Clásico online, con el mismo look que el local:
+//  fondo con doodles, lienzo grande, cabecera "Dibujando: X" y cuenta atrás
+//  sincronizada (roomRef.roundEndsAt).
+// ============================================================================
+
 class OnlineGame extends StatefulWidget {
   const OnlineGame({super.key, this.width, this.height, this.onFinish});
 
@@ -28,6 +34,16 @@ class OnlineGame extends StatefulWidget {
   State<OnlineGame> createState() => _OnlineGameState();
 }
 
+// ---- Paleta -----------------------------------------------------------------
+const Color _green = Color(0xFF19C08B);
+const Color _navy = Color(0xFF203A5C);
+const Color _ink = Color(0xFF213047);
+const Color _muted = Color(0xFF6B7280);
+const Color _blue = Color(0xFF4C9AF5);
+const Color _orange = Color(0xFFF5A623);
+const Color _teal = Color(0xFF17BEBB);
+const Color _red = Color(0xFFEF6C5A);
+
 class _Stroke {
   final List<Offset> points; // normalizados 0..1
   final Color color;
@@ -35,21 +51,36 @@ class _Stroke {
   _Stroke(this.points, this.color, this.width);
 }
 
-class _OnlineGameState extends State<OnlineGame> {
-  static const green = Color(0xFF19C08B);
-  static const navy = Color(0xFF203A5C);
-  static const ink = Color(0xFF213047);
-  static const bg = Color(0xFFF7F4EF);
-
+class _OnlineGameState extends State<OnlineGame>
+    with SingleTickerProviderStateMixin {
   final List<_Stroke> _local = [];
   _Stroke? _current;
-  Color _penColor = Colors.black;
+  Color _penColor = _navy;
   int? _lastRound;
   bool _finished = false;
   final _guessCtrl = TextEditingController();
 
+  // "reloj" a 1 Hz sin dart:async (AnimationController de 1s que se reinicia)
+  late final AnimationController _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..addStatusListener((s) {
+        if (s == AnimationStatus.completed) {
+          if (mounted) setState(() {});
+          _ticker.forward(from: 0);
+        }
+      });
+    _ticker.forward();
+  }
+
   @override
   void dispose() {
+    _ticker.dispose();
     _guessCtrl.dispose();
     super.dispose();
   }
@@ -61,107 +92,297 @@ class _OnlineGameState extends State<OnlineGame> {
     return Color(int.parse('FF$h', radix: 16));
   }
 
+  String _fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final roomRef = FFAppState().currentRoomRef;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (roomRef == null) {
-      return const Center(child: Text('No hay sala'));
+      return _bg(const Center(child: Text('No hay sala')));
     }
-    return Container(
+    return SizedBox(
       width: widget.width,
       height: widget.height,
-      color: bg,
-      padding: const EdgeInsets.all(14),
-      child: StreamBuilder<DocumentSnapshot>(
-        stream: roomRef.snapshots(),
-        builder: (context, roomSnap) {
-          final room = roomSnap.data?.data() as Map<String, dynamic>?;
-          if (room == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final status = room['status'] as String? ?? 'drawing';
-          final drawerRef = room['currentDrawerRef'] as DocumentReference?;
-          final word = (room['currentWord'] ?? '') as String;
-          final round = (room['currentRound'] ?? 1) as int;
-          final total = (room['totalRounds'] ?? 5) as int;
-          final hostRef = room['hostRef'] as DocumentReference?;
-          final isDrawer = drawerRef != null && drawerRef.id == uid;
-          final isHost = hostRef != null && hostRef.id == uid;
+      child: _bg(
+        StreamBuilder<DocumentSnapshot>(
+          stream: roomRef.snapshots(),
+          builder: (context, roomSnap) {
+            final room = roomSnap.data?.data() as Map<String, dynamic>?;
+            if (room == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final status = room['status'] as String? ?? 'drawing';
+            final drawerRef = room['currentDrawerRef'] as DocumentReference?;
+            final drawerName =
+                (room['currentDrawerName'] ?? 'Jugador') as String;
+            final word = (room['currentWord'] ?? '') as String;
+            final round = (room['currentRound'] ?? 1) as int;
+            final total = (room['totalRounds'] ?? 5) as int;
+            final hostRef = room['hostRef'] as DocumentReference?;
+            final isDrawer = drawerRef != null && drawerRef.id == uid;
+            final isHost = hostRef != null && hostRef.id == uid;
 
-          if (status == 'finished' && !_finished) {
-            _finished = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await _showFinalResults(roomRef);
-            });
-          }
-          if (isDrawer && _lastRound != round) {
-            _lastRound = round;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {
-                  _local.clear();
-                  _current = null;
-                });
-              }
-            });
-          }
+            // cuenta atrás desde roundEndsAt
+            final endsAt = (room['roundEndsAt'] as Timestamp?)?.toDate();
+            int remaining = 0;
+            if (endsAt != null) {
+              remaining = endsAt.difference(DateTime.now()).inSeconds;
+              if (remaining < 0) remaining = 0;
+            }
+            final low = remaining <= 10;
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Ronda $round de $total',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600)),
-              const SizedBox(height: 4),
-              Text(isDrawer ? 'Dibuja: $word' : 'Adivina qué es',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold, color: navy)),
-              const SizedBox(height: 10),
-              LayoutBuilder(
-                builder: (context, c) {
-                  final side = min(min(c.maxWidth, 460.0),
-                      MediaQuery.of(context).size.height * 0.42);
-                  return Center(
-                    child: isDrawer
-                        ? _drawerCanvas(roomRef, side)
-                        : _viewerCanvas(roomRef, side),
-                  );
-                },
+            if (status == 'finished' && !_finished) {
+              _finished = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                await _showFinalResults(roomRef);
+              });
+            }
+            if (isDrawer && _lastRound != round) {
+              _lastRound = round;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() {
+                    _local.clear();
+                    _current = null;
+                  });
+                }
+              });
+            }
+
+            return SafeArea(
+              child: Column(
+                children: [
+                  // ---- Cabecera: Dibujando: NOMBRE  +  cuenta atrás ----
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4)),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Text('🎨',
+                                    style: TextStyle(fontSize: 22)),
+                                const SizedBox(width: 10),
+                                const Text('Dibujando:',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        color: _muted,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    drawerName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 18,
+                                        color: _ink,
+                                        fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: low ? _red : _green,
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: (low ? _red : _green).withOpacity(0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4)),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('⏱️', style: TextStyle(fontSize: 18)),
+                              const SizedBox(width: 6),
+                              Text(_fmt(remaining),
+                                  style: const TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ---- Subtítulo: ronda + palabra/adivina ----
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+                    child: Column(
+                      children: [
+                        Text('Ronda $round de $total',
+                            style: const TextStyle(
+                                fontSize: 13,
+                                color: _muted,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        if (isDrawer)
+                          _wordChip(word)
+                        else
+                          const Text('Adivina qué es',
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: _navy)),
+                      ],
+                    ),
+                  ),
+                  // ---- Lienzo grande ----
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                              maxWidth: 800, maxHeight: 800),
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: LayoutBuilder(
+                              builder: (ctx, c) {
+                                final side = c.maxWidth;
+                                return isDrawer
+                                    ? _drawerCanvas(roomRef, side)
+                                    : _viewerCanvas(roomRef, side);
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // ---- Controles: paleta (dibujante) / respuesta (resto) ----
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: isDrawer ? _palette() : _guessRow(roomRef),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(height: 96, child: _guessesFeed(roomRef)),
+                  if (isHost)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                      child: _hostControls(roomRef),
+                    ),
+                ],
               ),
-              const SizedBox(height: 10),
-              if (isDrawer) _palette() else _guessRow(roomRef),
-              const SizedBox(height: 8),
-              SizedBox(height: 130, child: _guessesFeed(roomRef)),
-              if (isHost) _hostControls(roomRef),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _canvasBox(Widget child) => ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: child,
+  // -------- Fondo con doodles (igual que el local) ---------------------------
+  Widget _bg(Widget child) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFDF7EC), Color(0xFFF5EAD6)],
         ),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(child: _doodleLayer()),
+          Positioned.fill(child: child),
+        ],
+      ),
+    );
+  }
+
+  Widget _doodleLayer() {
+    const icons = <IconData>[
+      Icons.brush,
+      Icons.favorite,
+      Icons.star_rounded,
+      Icons.cloud,
+      Icons.palette,
+      Icons.lightbulb_outline,
+      Icons.emoji_emotions_outlined,
+      Icons.auto_awesome,
+    ];
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        const cell = 64.0;
+        final w = c.maxWidth.isFinite ? c.maxWidth : 400.0;
+        final h = c.maxHeight.isFinite ? c.maxHeight : 800.0;
+        final cols = (w / cell).ceil() + 1;
+        final rows = (h / cell).ceil() + 1;
+        final items = <Widget>[];
+        for (int r = 0; r < rows; r++) {
+          for (int col = 0; col < cols; col++) {
+            final hsh = ((r * 73856093) ^ (col * 19349663)) & 0x7fffffff;
+            final jx = (hsh % 1000) / 1000.0;
+            final jy = ((hsh >> 10) % 1000) / 1000.0;
+            final rot = ((hsh >> 20) % 1000) / 1000.0 * 6.28318;
+            final sz = 45.0 + (hsh >> 5) % 45;
+            final ic = icons[hsh % icons.length];
+            final left = col * cell + jx * cell - cell / 2;
+            final top = r * cell + jy * cell - cell / 2;
+            items.add(Positioned(
+              left: left,
+              top: top,
+              child: Transform.rotate(
+                angle: rot,
+                child: Icon(ic, size: sz, color: _navy.withOpacity(0.06)),
+              ),
+            ));
+          }
+        }
+        return ClipRect(child: Stack(children: items));
+      },
+    );
+  }
+
+  Widget _wordChip(String word) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: _teal.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _teal.withOpacity(0.5), width: 2),
+        ),
+        child: Text(
+          'Tu palabra: ${word.toUpperCase()}',
+          style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0E8C8A)),
+        ),
+      );
+
+  Widget _canvasBox(Widget child) => ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Container(color: Colors.white, child: child),
       );
 
   Widget _drawerCanvas(DocumentReference roomRef, double side) {
     Offset nrm(Offset p) =>
         Offset((p.dx / side).clamp(0.0, 1.0), (p.dy / side).clamp(0.0, 1.0));
-    return SizedBox(
-      width: side,
-      height: side,
-      child: GestureDetector(
+    return _canvasBox(
+      GestureDetector(
         onPanStart: (d) {
           _current = _Stroke([nrm(d.localPosition)], _penColor, 4.0);
           setState(() => _local.add(_current!));
@@ -179,53 +400,42 @@ class _OnlineGameState extends State<OnlineGame> {
           });
           await addStrokeOnline(roomRef, json);
         },
-        child: _canvasBox(
-            CustomPaint(painter: _Painter(_local), size: Size.infinite)),
+        child: CustomPaint(painter: _Painter(_local), size: Size(side, side)),
       ),
     );
   }
 
   Widget _viewerCanvas(DocumentReference roomRef, double side) {
-    return SizedBox(
-      width: side,
-      height: side,
-      child: StreamBuilder<QuerySnapshot>(
-        stream: roomRef.collection('strokes').orderBy('order').snapshots(),
-        builder: (context, snap) {
-          final strokes = <_Stroke>[];
-          for (final d in (snap.data?.docs ?? const [])) {
-            final m = d.data() as Map<String, dynamic>;
-            try {
-              final data =
-                  jsonDecode(m['data'] as String) as Map<String, dynamic>;
-              final pts = (data['points'] as List)
-                  .map<Offset>((e) => Offset(
-                      (e[0] as num).toDouble(), (e[1] as num).toDouble()))
-                  .toList();
-              strokes.add(_Stroke(
-                  pts,
-                  _fromHex((data['color'] ?? '#000000') as String),
-                  (data['width'] as num?)?.toDouble() ?? 4.0));
-            } catch (_) {}
-          }
-          return _canvasBox(
-              CustomPaint(painter: _Painter(strokes), size: Size.infinite));
-        },
-      ),
+    return StreamBuilder<QuerySnapshot>(
+      stream: roomRef.collection('strokes').orderBy('order').snapshots(),
+      builder: (context, snap) {
+        final strokes = <_Stroke>[];
+        for (final d in (snap.data?.docs ?? const [])) {
+          final m = d.data() as Map<String, dynamic>;
+          try {
+            final data =
+                jsonDecode(m['data'] as String) as Map<String, dynamic>;
+            final pts = (data['points'] as List)
+                .map<Offset>((e) =>
+                    Offset((e[0] as num).toDouble(), (e[1] as num).toDouble()))
+                .toList();
+            strokes.add(_Stroke(
+                pts,
+                _fromHex((data['color'] ?? '#000000') as String),
+                (data['width'] as num?)?.toDouble() ?? 4.0));
+          } catch (_) {}
+        }
+        return _canvasBox(
+            CustomPaint(painter: _Painter(strokes), size: Size(side, side)));
+      },
     );
   }
 
   Widget _palette() {
-    final palette = [
-      Colors.black,
-      Colors.red,
-      Colors.blue,
-      Colors.green,
-      Colors.orange
-    ];
+    final palette = [_navy, _red, _blue, _green, _orange];
     return Wrap(
       alignment: WrapAlignment.center,
-      spacing: 8,
+      spacing: 12,
       children: palette.map((col) {
         final sel = col == _penColor;
         return GestureDetector(
@@ -236,8 +446,14 @@ class _OnlineGameState extends State<OnlineGame> {
             decoration: BoxDecoration(
               color: col,
               shape: BoxShape.circle,
-              border:
-                  Border.all(color: sel ? navy : Colors.transparent, width: 3),
+              border: Border.all(
+                  color: sel ? _ink : Colors.white, width: sel ? 3 : 2),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2)),
+              ],
             ),
           ),
         );
@@ -251,16 +467,26 @@ class _OnlineGameState extends State<OnlineGame> {
         Expanded(
           child: TextField(
             controller: _guessCtrl,
-            style: const TextStyle(color: ink),
+            style: const TextStyle(color: _ink),
             onSubmitted: (_) => _sendGuess(roomRef),
             decoration: InputDecoration(
               hintText: 'Escribe tu respuesta',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: _green, width: 2),
               ),
             ),
           ),
@@ -269,13 +495,15 @@ class _OnlineGameState extends State<OnlineGame> {
         ElevatedButton(
           onPressed: () => _sendGuess(roomRef),
           style: ElevatedButton.styleFrom(
-            backgroundColor: green,
+            backgroundColor: _green,
             foregroundColor: Colors.white,
+            elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
-          child: const Text('Enviar'),
+          child: const Text('Enviar',
+              style: TextStyle(fontWeight: FontWeight.w800)),
         ),
       ],
     );
@@ -288,8 +516,88 @@ class _OnlineGameState extends State<OnlineGame> {
     await submitGuessOnline(roomRef, t);
   }
 
-  // Al terminar la partida: diálogo de resultados (🏆🥈🥉) con las
-  // puntuaciones de la subcolección players, y luego salir de la pantalla.
+  Widget _guessesFeed(DocumentReference roomRef) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: roomRef
+          .collection('guesses')
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? const [];
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final g = docs[i].data() as Map<String, dynamic>;
+            final correct = g['isCorrect'] == true;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(correct ? Icons.check_circle : Icons.chat_bubble_outline,
+                      color: correct ? _green : Colors.grey, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      correct
+                          ? '${g['displayName']} ¡acertó!'
+                          : '${g['displayName']}: ${g['text']}',
+                      style: TextStyle(
+                          color: correct ? _green : _ink,
+                          fontWeight:
+                              correct ? FontWeight.bold : FontWeight.normal),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _hostControls(DocumentReference roomRef) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () async {
+              await roomRef.update({'status': 'finished'});
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _muted,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Terminar'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: () async {
+              await startRoundOnline(roomRef);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _green,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Siguiente ronda',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _showFinalResults(DocumentReference roomRef) async {
     final names = <String>[];
     final scores = <int>[];
@@ -312,75 +620,6 @@ class _OnlineGameState extends State<OnlineGame> {
       Navigator.of(context).maybePop();
     }
   }
-
-  Widget _guessesFeed(DocumentReference roomRef) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: roomRef
-          .collection('guesses')
-          .orderBy('createdAt', descending: true)
-          .limit(20)
-          .snapshots(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? const [];
-        return ListView.builder(
-          itemCount: docs.length,
-          itemBuilder: (context, i) {
-            final g = docs[i].data() as Map<String, dynamic>;
-            final correct = g['isCorrect'] == true;
-            return ListTile(
-              dense: true,
-              leading: Icon(
-                  correct ? Icons.check_circle : Icons.chat_bubble_outline,
-                  color: correct ? green : Colors.grey,
-                  size: 20),
-              title: Text(
-                correct
-                    ? '${g['displayName']} ¡acertó!'
-                    : '${g['displayName']}: ${g['text']}',
-                style: TextStyle(
-                    color: correct ? green : ink,
-                    fontWeight: correct ? FontWeight.bold : FontWeight.normal),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _hostControls(DocumentReference roomRef) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () async {
-                await roomRef.update({'status': 'finished'});
-              },
-              child: const Text('Terminar'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed: () async {
-                await startRoundOnline(roomRef);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Siguiente ronda'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _Painter extends CustomPainter {
@@ -392,6 +631,7 @@ class _Painter extends CustomPainter {
       final p = Paint()
         ..color = s.color
         ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
         ..strokeWidth = s.width
         ..style = PaintingStyle.stroke;
       for (var i = 0; i < s.points.length - 1; i++) {

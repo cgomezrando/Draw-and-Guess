@@ -196,9 +196,77 @@ Future<String> startOnlineGame(BuildContext context) async {
       },
     );
     if (mode == null) return '';
+
+    // Elegir dificultad (se guarda en la sala; las palabras vienen de `words`)
+    final difficulty = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        Widget diffCard(Color c, String t, String s, String v) => InkWell(
+              onTap: () => Navigator.pop(ctx, v),
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: c.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: c.withOpacity(0.35), width: 1.5),
+                ),
+                child: Row(children: [
+                  Container(
+                      width: 44,
+                      height: 44,
+                      decoration:
+                          BoxDecoration(color: c, shape: BoxShape.circle)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(t,
+                            style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: navy)),
+                        const SizedBox(height: 2),
+                        Text(s,
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: c),
+                ]),
+              ),
+            );
+        return sheetBox(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              handle(),
+              const Text('Elige la dificultad',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold, color: navy)),
+              const SizedBox(height: 16),
+              diffCard(const Color(0xFF19C08B), 'Fácil', 'Objetos sencillos',
+                  'facil'),
+              diffCard(purple, 'Medio', 'Un poco más difícil', 'medio'),
+              diffCard(const Color(0xFFF5A623), 'Difícil',
+                  'Conceptos abstractos', 'dificil'),
+            ],
+          ),
+        );
+      },
+    );
+    if (difficulty == null) return '';
+
     try {
       final userRef = await ensureUserDoc(name);
-      final roomRef = await createRoom(mode, userRef, name);
+      final roomRef = await createRoom(mode, userRef, name, difficulty);
       final snap = await roomRef.get();
       FFAppState().update(() {
         FFAppState().currentRoomRef = roomRef;

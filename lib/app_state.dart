@@ -131,8 +131,7 @@ class FFAppState extends ChangeNotifier {
     _localSeconds = value;
   }
 
-  String _openaiKey =
-      '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';
+  String _openaiKey = '';
   String get openaiKey => _openaiKey;
   set openaiKey(String value) {
     _openaiKey = value;
