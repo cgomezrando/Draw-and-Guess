@@ -10,18 +10,17 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
-// ============================================================================
-//  LocalGame  —  Modo CLÁSICO local (uno dibuja, el resto adivina en voz alta)
-//  Flujo: handoff → showword → ready → drawing(cuenta atrás) → timeup/reveal
-//  Cuenta atrás con AnimationController (no requiere imports extra).
-// ============================================================================
-
+/// ============================================================================
+/// LocalGame  —  Modo CLÁSICO local (uno dibuja, el resto adivina en voz
+/// alta) Flujo: handoff → showword → ready → drawing(cuenta atrás) →
+/// timeup/reveal Cuenta atrás con AnimationController (no requiere imports
+/// extra).
+///
+/// ============================================================================
 class LocalGame extends StatefulWidget {
   const LocalGame({Key? key, this.width, this.height}) : super(key: key);
-
   final double? width;
   final double? height;
-
   @override
   State<LocalGame> createState() => _LocalGameState();
 }
@@ -36,7 +35,6 @@ const Color _orange = Color(0xFFF5A623); // ✏️ (libre)
 const Color _teal = Color(0xFF17BEBB); // 🤫 tu palabra
 const Color _purple = Color(0xFF6C5CE7); // 🔄 siguiente jugador
 const Color _red = Color(0xFFEF6C5A); // ⏰ se acabó el tiempo
-
 const Color _yellow = Color(0xFFF5B301); // 💡 la palabra era
 
 enum _Phase { handoff, showword, ready, drawing, timeup, reveal }
@@ -54,29 +52,32 @@ class _LocalGameState extends State<LocalGame>
   String _word = '';
   final List<_Stroke> _strokes = [];
   Color _penColor = _navy;
-
   late final AnimationController _ctrl;
   int _seconds = 60; // duración elegida (configurable)
   int _left = 60;
 
+  // Generador pseudoaleatorio (Park-Miller, seguro en web)
+  int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
+  int _rand() {
+    _rng = (_rng * 48271) % 2147483647;
+    return _rng;
+  }
+
   final Map<int, int> _scores = {}; // puntos por jugador (índice)
   int? _awardedTo; // a quién se dio el punto en este turno (null = sin elegir)
-
   // -------- Estado de jugadores (defensivo) ----------------------------------
   // Cada elemento de localPlayers es un LocalPlayerStruct → usamos su .name.
   List<String> get _players {
     try {
-      final raw = FFAppState().localPlayers as List;
-      final names = raw.map((e) {
-        try {
-          return ((e as dynamic).name as String);
-        } catch (_) {
-          return e.toString();
-        }
-      }).toList();
-      if (names.isNotEmpty) return names;
-    } catch (_) {}
-    return ['Jugador 1', 'Jugador 2'];
+      final raw = FFAppState().localPlayers;
+      if (raw.isEmpty) return ['Jugador 1', 'Jugador 2'];
+      return List<String>.generate(raw.length, (i) {
+        final n = raw[i].name.trim();
+        return n.isEmpty ? 'Jugador ${i + 1}' : n;
+      });
+    } catch (_) {
+      return ['Jugador 1', 'Jugador 2'];
+    }
   }
 
   int get _drawerIndex {
@@ -97,7 +98,6 @@ class _LocalGameState extends State<LocalGame>
   }
 
   String get _drawer => _players[_drawerIndex];
-
   @override
   void initState() {
     super.initState();
@@ -140,9 +140,7 @@ class _LocalGameState extends State<LocalGame>
       pool = const ['gato', 'perro', 'sol', 'casa', 'árbol'];
     }
     if (pool.isEmpty) pool = const ['gato', 'perro', 'sol'];
-    // pseudo-aleatorio sin dart:math (evita imports extra)
-    final seed = DateTime.now().microsecondsSinceEpoch;
-    _word = pool[seed % pool.length];
+    _word = pool[_rand() % pool.length];
   }
 
   void _startTimer() {
@@ -349,13 +347,11 @@ class _LocalGameState extends State<LocalGame>
           height: 1.1,
         ),
       );
-
   Widget _subtitle(String t) => Text(
         t,
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 15.5, color: _muted, height: 1.35),
       );
-
   Widget _btn(String label, Color color, VoidCallback onTap) {
     return SizedBox(
       width: double.infinity,
@@ -536,10 +532,11 @@ class _LocalGameState extends State<LocalGame>
   Widget _winnerChips() {
     final chips = <Widget>[];
     for (int i = 0; i < _players.length; i++) {
-      if (i == _drawerIndex) continue; // el dibujante no adivina
-      chips.add(_awardChip(_players[i], i));
+      final raw = _players[i].trim();
+      final name = raw.isEmpty ? 'Jugador ${i + 1}' : raw;
+      chips.add(_awardChip(name, i, canAward: i != _drawerIndex));
     }
-    chips.add(_awardChip('Nadie', -1));
+    chips.add(_awardChip('Nadie acertó', -1));
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: 8,
@@ -548,21 +545,25 @@ class _LocalGameState extends State<LocalGame>
     );
   }
 
-  Widget _awardChip(String label, int idx) {
+  Widget _awardChip(String label, int idx, {bool canAward = true}) {
     final sel = _awardedTo == idx;
     return GestureDetector(
-      onTap: () => setState(() {
-        // deshacer el punto anterior de este turno si lo había
-        if (_awardedTo != null && _awardedTo! >= 0) {
-          _scores[_awardedTo!] = (_scores[_awardedTo!] ?? 0) - 1;
-        }
-        _awardedTo = idx;
-        if (idx >= 0) _scores[idx] = (_scores[idx] ?? 0) + 1;
-      }),
+      onTap: !canAward
+          ? null
+          : () => setState(() {
+                // deshacer el punto anterior de este turno si lo había
+                if (_awardedTo != null && _awardedTo! >= 0) {
+                  _scores[_awardedTo!] = (_scores[_awardedTo!] ?? 0) - 1;
+                }
+                _awardedTo = idx;
+                if (idx >= 0) _scores[idx] = (_scores[idx] ?? 0) + 1;
+              }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: sel ? _green : const Color(0xFFF3F4F6),
+          color: sel
+              ? _green
+              : (canAward ? const Color(0xFFF3F4F6) : const Color(0xFFE5E7EB)),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
               color: sel ? _green : const Color(0xFFE2E5EA), width: 2),
@@ -572,7 +573,9 @@ class _LocalGameState extends State<LocalGame>
           style: TextStyle(
             fontSize: 14.5,
             fontWeight: FontWeight.w800,
-            color: sel ? Colors.white : _ink,
+            color: sel
+                ? Colors.white
+                : (canAward ? _ink : const Color(0xFF9CA3AF)),
           ),
         ),
       ),
@@ -780,7 +783,6 @@ class _LocalGameState extends State<LocalGame>
 class _Painter extends CustomPainter {
   _Painter(this.strokes);
   final List<_Stroke> strokes;
-
   @override
   void paint(Canvas canvas, Size size) {
     for (final s in strokes) {

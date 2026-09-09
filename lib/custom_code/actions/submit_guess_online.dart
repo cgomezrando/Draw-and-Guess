@@ -32,9 +32,21 @@ Future<bool> submitGuessOnline(DocumentReference roomRef, String text) async {
 
   final correct = secret.isNotEmpty && norm(text) == norm(secret);
 
-  final userSnap = await userRef.get();
-  final displayName =
-      ((userSnap.data() as Map?)?['display_name'] ?? 'Jugador') as String;
+  // Nombre correcto desde la subcolección players (no desde el user doc,
+  // cuyos campos van en snake_case y no coinciden).
+  final pq = await roomRef
+      .collection('players')
+      .where('userRef', isEqualTo: userRef)
+      .limit(1)
+      .get();
+  String displayName = 'Jugador';
+  DocumentReference? playerRef;
+  Map<String, dynamic>? pdata;
+  if (pq.docs.isNotEmpty) {
+    playerRef = pq.docs.first.reference;
+    pdata = pq.docs.first.data() as Map<String, dynamic>;
+    displayName = (pdata['displayName'] ?? 'Jugador').toString();
+  }
 
   await roomRef.collection('guesses').add({
     'userRef': userRef,
@@ -45,21 +57,13 @@ Future<bool> submitGuessOnline(DocumentReference roomRef, String text) async {
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  if (correct) {
-    final pq = await roomRef
-        .collection('players')
-        .where('userRef', isEqualTo: userRef)
-        .limit(1)
-        .get();
-    if (pq.docs.isNotEmpty) {
-      final p = pq.docs.first;
-      final already = (p.data() as Map)['hasGuessedCorrect'] == true;
-      if (!already) {
-        await p.reference.update({
-          'score': ((p.data() as Map)['score'] ?? 0) + 100,
-          'hasGuessedCorrect': true,
-        });
-      }
+  if (correct && playerRef != null) {
+    final already = pdata?['hasGuessedCorrect'] == true;
+    if (already != true) {
+      await playerRef.update({
+        'score': ((pdata?['score'] ?? 0) as num).toInt() + 100,
+        'hasGuessedCorrect': true,
+      });
     }
   }
   return correct;

@@ -10,41 +10,25 @@ import 'package:flutter/material.dart';
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 // ============================================================================
-//  Custom Action: scoreDrawingAi
-//  Recibe los TRAZOS del dibujo (como List<String>) + la palabra objetivo,
-//  los rasteriza a un PNG en un lienzo off-screen y se lo pasa a GPT-4o-mini
-//  (visión). Devuelve un AiResultStruct { score, guess, reason }.
-//
-//  Formato de cada trazo (string):  "RRGGBB:x1,y1;x2,y2;..."
-//    · RRGGBB  = color en hex (sin alfa)
-//    · xN,yN   = puntos normalizados 0..1
-//
-//  ALTA EN FLUTTERFLOW (Custom Action):
-//    - Nombre: scoreDrawingAi
-//    - Return Type: Data Type → AiResult  (lista OFF)
-//    - Argumentos:
-//        · strokes : String, "Is List" = ON
-//        · word    : String
-//    - Include BuildContext: OFF
-//    - Dependencia (Custom Code → pubspec):  http: ^1.2.0
+//  Custom Action: scoreDrawingAi   (versión con Cloud Function)
+//  Rasteriza los trazos a PNG y los envía a TU Cloud Function `scoreDrawing`,
+//  que a su vez llama a OpenAI (la clave vive en el servidor, no en la app).
 // ============================================================================
 
-import '/app_state.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
+
+const String _scoreFnUrl =
+    'https://us-central1-draw-and-guess-29e50.cloudfunctions.net/scoreDrawing';
 
 Future<AiResultStruct> scoreDrawingAi(
   List<String> strokes,
   String word,
 ) async {
-  final key = FFAppState().openaiKey;
-  if (key.trim().isEmpty) {
+  if (_scoreFnUrl.contains('PEGA') || _scoreFnUrl.isEmpty) {
     return AiResultStruct(
-      score: -1,
-      guess: '',
-      reason: 'Falta la API key. Pégala en App State → openaiKey.',
-    );
+        score: -1, guess: '', reason: 'Falta la URL de la Cloud Function.');
   }
 
   try {
@@ -96,89 +80,29 @@ Future<AiResultStruct> scoreDrawingAi(
     }
     final b64 = base64Encode(bd.buffer.asUint8List());
 
-    // 2) Preguntar a la IA
-    final uri = Uri.parse('https://api.openai.com/v1/chat/completions');
-    final payload = jsonEncode({
-      'model': 'gpt-4o-mini',
-      'temperature': 0.2,
-      'max_tokens': 200,
-      'messages': [
-        {
-          'role': 'system',
-          'content': 'Eres un juez ESTRICTO de un juego de dibujar y adivinar. '
-              'Evalúas cuán claramente un dibujo hecho a mano representa una '
-              'palabra concreta. Sé exigente y crítico: la mayoría de los '
-              'dibujos amateur deben quedar por debajo de 50. Reglas de '
-              'puntuación: 0-10 si el lienzo está casi vacío, es una sola '
-              'línea, garabatos o algo irreconocible; 10-40 si se intuye '
-              'algo pero es dudoso; 40-70 si se reconoce con esfuerzo; '
-              '70-100 solo si es claramente identificable como esa palabra '
-              'concreta (no una categoría vaga). No premies el parecido con '
-              'una categoría general (p. ej. "un animal"): puntúa el parecido '
-              'con la palabra EXACTA. Responde SIEMPRE solo con un objeto '
-              'JSON, sin texto adicional.'
-        },
-        {
-          'role': 'user',
-          'content': [
-            {
-              'type': 'text',
-              'text': 'El dibujo intenta representar la palabra "$word". Puntúa de 0 '
-                  'a 100 cuán claramente se reconoce como "$word" siguiendo '
-                  'las reglas estrictas. Si está casi vacío o es solo una '
-                  'línea o garabatos, pon 0-10. En "guess" di honestamente '
-                  'qué parece (incluso "nada" o "un garabato"). Devuelve SOLO '
-                  'este JSON: {"score": <entero 0-100>, "guess": "<qué parece '
-                  'que es>", "reason": "<motivo breve en español>"}'
-            },
-            {
-              'type': 'image_url',
-              'image_url': {
-                'url': 'data:image/png;base64,$b64',
-                'detail': 'low',
-              }
-            }
-          ]
-        }
-      ]
-    });
-
+    // 2) Llamar a la Cloud Function (sin CORS, sin clave en la app)
     final resp = await http.post(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $key',
-        'Content-Type': 'application/json',
-      },
-      body: payload,
+      Uri.parse(_scoreFnUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'image': b64, 'word': word}),
     );
 
     if (resp.statusCode != 200) {
       return AiResultStruct(
         score: -1,
         guess: '',
-        reason: 'Error ${resp.statusCode}. Revisa la API key o el saldo.',
+        reason: 'Error ${resp.statusCode} de la función.',
       );
     }
 
-    final data = jsonDecode(utf8.decode(resp.bodyBytes));
-    var content =
-        (data['choices'][0]['message']['content'] ?? '').toString().trim();
-    if (content.startsWith('```')) {
-      content = content
-          .replaceAll(RegExp(r'^```[a-zA-Z]*'), '')
-          .replaceAll('```', '')
-          .trim();
-    }
-
-    final parsed = jsonDecode(content);
+    final parsed = jsonDecode(utf8.decode(resp.bodyBytes));
     int score = 0;
     if (parsed['score'] is num) {
       score = (parsed['score'] as num).round();
     } else {
       score = int.tryParse('${parsed['score']}') ?? 0;
     }
-    if (score < 0) score = 0;
-    if (score > 100) score = 100;
+    if (score < 0 && parsed['reason'] == null) score = 0;
 
     return AiResultStruct(
       score: score,

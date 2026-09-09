@@ -64,6 +64,13 @@ class _LocalAiGameState extends State<LocalAiGame>
   int _seconds = 60;
   int _left = 60;
 
+  // Generador pseudoaleatorio (Park-Miller, seguro en web)
+  int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
+  int _rand() {
+    _rng = (_rng * 48271) % 2147483647;
+    return _rng;
+  }
+
   int _idx = 0;
   List<String> _names = [];
   List<String> _words = [];
@@ -125,8 +132,16 @@ class _LocalAiGameState extends State<LocalAiGame>
       pool = const ['gato', 'perro', 'sol', 'casa', 'árbol', 'luna', 'pez'];
     }
     if (pool.isEmpty) pool = const ['gato', 'perro', 'sol', 'casa'];
-    final base = DateTime.now().microsecondsSinceEpoch % pool.length;
-    return List<String>.generate(n, (i) => pool[(base + i) % pool.length]);
+    final chosen = <String>[];
+    final used = <int>{};
+    int guard = 0;
+    while (chosen.length < n && guard < 2000) {
+      final idx = _rand() % pool.length;
+      if (used.add(idx)) chosen.add(pool[idx]);
+      guard++;
+    }
+    while (chosen.length < n) chosen.add(pool[_rand() % pool.length]);
+    return chosen;
   }
 
   void _onTick() {

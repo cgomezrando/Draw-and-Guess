@@ -66,6 +66,13 @@ class _LocalPairsGameState extends State<LocalPairsGame>
   int _seconds = 60; // duración elegida (configurable)
   int _left = 60;
 
+  // Generador pseudoaleatorio (Park-Miller, seguro en web)
+  int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
+  int _rand() {
+    _rng = (_rng * 48271) % 2147483647;
+    return _rng;
+  }
+
   int _turn = 0; // avanza en cada turno completo
   final Map<int, int> _scores = {}; // puntos por pareja (índice)
 
@@ -146,8 +153,7 @@ class _LocalPairsGameState extends State<LocalPairsGame>
       pool = const ['gato', 'perro', 'sol', 'casa', 'árbol'];
     }
     if (pool.isEmpty) pool = const ['gato', 'perro', 'sol'];
-    final seed = DateTime.now().microsecondsSinceEpoch;
-    _word = pool[seed % pool.length];
+    _word = pool[_rand() % pool.length];
   }
 
   void _startTimer() {

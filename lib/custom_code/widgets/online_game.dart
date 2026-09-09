@@ -89,10 +89,10 @@ class _OnlineGameState extends State<OnlineGame> {
           final isDrawer = drawerRef != null && drawerRef.id == uid;
           final isHost = hostRef != null && hostRef.id == uid;
 
-          if (status == 'finished' && !_finished && widget.onFinish != null) {
+          if (status == 'finished' && !_finished) {
             _finished = true;
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await widget.onFinish!();
+              await _showFinalResults(roomRef);
             });
           }
           if (isDrawer && _lastRound != round) {
@@ -286,6 +286,31 @@ class _OnlineGameState extends State<OnlineGame> {
     if (t.isEmpty) return;
     _guessCtrl.clear();
     await submitGuessOnline(roomRef, t);
+  }
+
+  // Al terminar la partida: diálogo de resultados (🏆🥈🥉) con las
+  // puntuaciones de la subcolección players, y luego salir de la pantalla.
+  Future<void> _showFinalResults(DocumentReference roomRef) async {
+    final names = <String>[];
+    final scores = <int>[];
+    try {
+      final ps = await roomRef
+          .collection('players')
+          .orderBy('score', descending: true)
+          .get();
+      for (final d in ps.docs) {
+        final m = d.data() as Map<String, dynamic>;
+        names.add((m['displayName'] ?? 'Jugador').toString());
+        scores.add(((m['score'] ?? 0) as num).toInt());
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    await showResults(context, names, scores);
+    if (widget.onFinish != null) {
+      await widget.onFinish!();
+    } else if (mounted) {
+      Navigator.of(context).maybePop();
+    }
   }
 
   Widget _guessesFeed(DocumentReference roomRef) {
