@@ -65,6 +65,13 @@ class _LocalPairsGameState extends State<LocalPairsGame>
   late final AnimationController _ctrl;
   int _seconds = 60; // duración elegida (configurable)
   int _left = 60;
+  int get _limit {
+    try {
+      return FFAppState().localRounds as int; // 0 = indefinido
+    } catch (_) {
+      return 0;
+    }
+  }
 
   // Generador pseudoaleatorio (Park-Miller, seguro en web)
   int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
@@ -518,19 +525,29 @@ class _LocalPairsGameState extends State<LocalPairsGame>
             style: const TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w700, color: _muted)),
         const SizedBox(height: 20),
-        _btn('Siguiente turno', _purple, _nextTurn),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () async {
+        if (_limit > 0 && (_turn + 1) >= _limit)
+          _btn('Ver resultados', _yellow, () async {
             final names = List<String>.generate(
                 _pairCount, (i) => '${_pairA(i)} & ${_pairB(i)}');
             final scores =
                 List<int>.generate(_pairCount, (i) => _scores[i] ?? 0);
             await showResults(context, names, scores);
-          },
-          child: const Text('Terminar y ver resultados',
-              style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
-        ),
+          })
+        else ...[
+          _btn('Siguiente turno', _purple, _nextTurn),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () async {
+              final names = List<String>.generate(
+                  _pairCount, (i) => '${_pairA(i)} & ${_pairB(i)}');
+              final scores =
+                  List<int>.generate(_pairCount, (i) => _scores[i] ?? 0);
+              await showResults(context, names, scores);
+            },
+            child: const Text('Terminar y ver resultados',
+                style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ],
     );
   }

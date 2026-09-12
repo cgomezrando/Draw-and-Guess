@@ -144,6 +144,38 @@ Future<String> startLocalGame(BuildContext context) async {
     );
   }
 
+  // Selector de nº de dibujos por partida (5, 10 o ∞=indefinido)
+  Widget roundsChips(int current, void Function(int) onPick) {
+    final opts = [5, 10, 0]; // 0 = indefinido
+    return Row(
+      children: opts.map((s) {
+        final sel = s == current;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () => onPick(s),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: sel ? green : const Color(0xFFF3F5F8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(s == 0 ? '∞' : '$s',
+                    style: TextStyle(
+                        color: sel ? Colors.white : navy,
+                        fontWeight: FontWeight.bold,
+                        fontSize: s == 0 ? 20 : 16)),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   String initialLevel() {
     final d = FFAppState().difficulty;
     return ['facil', 'medio', 'dificil'].contains(d) ? d : 'facil';
@@ -155,6 +187,14 @@ Future<String> startLocalGame(BuildContext context) async {
       if (s == 30 || s == 60 || s == 90) return s;
     } catch (_) {}
     return 60;
+  }
+
+  int initialRounds() {
+    try {
+      final r = FFAppState().localRounds;
+      if (r == 0 || r == 5 || r == 10) return r;
+    } catch (_) {}
+    return 0;
   }
 
   Future<String?> chooseMode() {
@@ -231,6 +271,7 @@ Future<String> startLocalGame(BuildContext context) async {
     int count = mode == 'ai' ? 1 : 2;
     var level = initialLevel();
     var seconds = initialSeconds();
+    var rounds = initialRounds();
     final ctrls = List.generate(maxCount, (_) => TextEditingController());
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -269,6 +310,15 @@ Future<String> startLocalGame(BuildContext context) async {
                           color: navy)),
                   const SizedBox(height: 8),
                   timeChips(seconds, (v) => setSt(() => seconds = v)),
+                  const SizedBox(height: 18),
+                  const Text('¿Cuántos dibujos?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  roundsChips(rounds, (v) => setSt(() => rounds = v)),
                   const SizedBox(height: 18),
                   const Text('¿Cuántos jugadores?',
                       textAlign: TextAlign.center,
@@ -338,6 +388,7 @@ Future<String> startLocalGame(BuildContext context) async {
         FFAppState().localMode = mode;
         FFAppState().difficulty = level;
         FFAppState().localSeconds = seconds;
+        FFAppState().localRounds = rounds;
         FFAppState().localDrawerIndex = 0;
         FFAppState().localRound = 1;
       });
@@ -353,6 +404,7 @@ Future<String> startLocalGame(BuildContext context) async {
     int count = 2;
     var level = initialLevel();
     var seconds = initialSeconds();
+    var rounds = initialRounds();
     final a = List.generate(maxPairs, (_) => TextEditingController());
     final b = List.generate(maxPairs, (_) => TextEditingController());
     final ok = await showModalBottomSheet<bool>(
@@ -394,6 +446,15 @@ Future<String> startLocalGame(BuildContext context) async {
                           color: navy)),
                   const SizedBox(height: 8),
                   timeChips(seconds, (v) => setSt(() => seconds = v)),
+                  const SizedBox(height: 18),
+                  const Text('¿Cuántos dibujos?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 8),
+                  roundsChips(rounds, (v) => setSt(() => rounds = v)),
                   const SizedBox(height: 18),
                   const Text('¿Cuántas parejas?',
                       textAlign: TextAlign.center,
@@ -482,6 +543,7 @@ Future<String> startLocalGame(BuildContext context) async {
         FFAppState().localMode = 'pairs';
         FFAppState().difficulty = level;
         FFAppState().localSeconds = seconds;
+        FFAppState().localRounds = rounds;
         FFAppState().localDrawerIndex = 0;
         FFAppState().localRound = 1;
       });

@@ -55,6 +55,14 @@ class _LocalGameState extends State<LocalGame>
   late final AnimationController _ctrl;
   int _seconds = 60; // duración elegida (configurable)
   int _left = 60;
+  int _turnsDone = 0; // dibujos completados en la partida
+  int get _limit {
+    try {
+      return FFAppState().localRounds as int; // 0 = indefinido
+    } catch (_) {
+      return 0;
+    }
+  }
 
   // Generador pseudoaleatorio (Park-Miller, seguro en web)
   int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
@@ -65,6 +73,12 @@ class _LocalGameState extends State<LocalGame>
 
   final Map<int, int> _scores = {}; // puntos por jugador (índice)
   int? _awardedTo; // a quién se dio el punto en este turno (null = sin elegir)
+
+  // Estado del "que lo adivine la IA" en la pantalla final
+  bool _aiBusy = false;
+  bool _aiUsed = false;
+  String _aiGuess = '';
+  bool _aiCorrect = false;
   // -------- Estado de jugadores (defensivo) ----------------------------------
   // Cada elemento de localPlayers es un LocalPlayerStruct → usamos su .name.
   List<String> get _players {
@@ -163,6 +177,10 @@ class _LocalGameState extends State<LocalGame>
       _strokes.clear();
       _word = '';
       _awardedTo = null;
+      _aiBusy = false;
+      _aiUsed = false;
+      _aiGuess = '';
+      _aiCorrect = false;
       _phase = _Phase.handoff;
     });
   }
@@ -478,7 +496,10 @@ class _LocalGameState extends State<LocalGame>
         _subtitle('Veamos las respuestas.'),
         const SizedBox(height: 22),
         _btn('Continuar', _green, () {
-          setState(() => _phase = _Phase.reveal);
+          setState(() {
+            _turnsDone++;
+            _phase = _Phase.reveal;
+          });
         }),
       ],
     );
@@ -512,19 +533,30 @@ class _LocalGameState extends State<LocalGame>
         _subtitle('¿Quién la adivinó? (le suma 1 punto)'),
         const SizedBox(height: 12),
         _winnerChips(),
-        const SizedBox(height: 20),
-        _btn('Siguiente jugador', _purple, _nextDrawer),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: () async {
+        const SizedBox(height: 14),
+        _aiSection(),
+        const SizedBox(height: 18),
+        if (_limit > 0 && _turnsDone >= _limit)
+          _btn('Ver resultados', _yellow, () async {
             final names = List<String>.from(_players);
             final scores =
                 List<int>.generate(_players.length, (i) => _scores[i] ?? 0);
             await showResults(context, names, scores);
-          },
-          child: const Text('Terminar y ver resultados',
-              style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
-        ),
+          })
+        else ...[
+          _btn('Siguiente jugador', _purple, _nextDrawer),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () async {
+              final names = List<String>.from(_players);
+              final scores =
+                  List<int>.generate(_players.length, (i) => _scores[i] ?? 0);
+              await showResults(context, names, scores);
+            },
+            child: const Text('Terminar y ver resultados',
+                style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ],
     );
   }
@@ -580,6 +612,115 @@ class _LocalGameState extends State<LocalGame>
         ),
       ),
     );
+  }
+
+  // -------- "Que lo adivine la IA" ------------------------------------------
+  Widget _aiSection() {
+    if (_aiBusy) {
+      return Column(
+        children: const [
+          SizedBox(height: 4),
+          CircularProgressIndicator(color: _teal),
+          SizedBox(height: 8),
+          Text('La IA está pensando…',
+              style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
+        ],
+      );
+    }
+    if (_aiUsed) {
+      final ok = _aiCorrect;
+      final c = ok ? _green : _muted;
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        decoration: BoxDecoration(
+          color: c.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: c.withOpacity(0.5), width: 2),
+        ),
+        child: Column(
+          children: [
+            Text(
+                '🤖 La IA dijo: ${_aiGuess.isEmpty ? '¿?' : _aiGuess.toUpperCase()}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w800, color: _ink)),
+            const SizedBox(height: 4),
+            Text(ok ? '¡Acertó! +1 para $_drawer' : 'No la adivinó',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w700, color: c)),
+          ],
+        ),
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: _strokes.isEmpty ? null : _askAi,
+      icon: const Text('🤖', style: TextStyle(fontSize: 18)),
+      label: const Text('Que lo adivine la IA'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _teal,
+        side: const BorderSide(color: _teal, width: 2),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
+  Future<void> _askAi() async {
+    if (_strokes.isEmpty) return;
+    setState(() => _aiBusy = true);
+    String guess = '';
+    try {
+      guess = await guessDrawingAi(_serializeStrokes());
+    } catch (_) {}
+    final correct = _aiMatches(guess);
+    if (!mounted) return;
+    setState(() {
+      _aiBusy = false;
+      _aiUsed = true;
+      _aiGuess = guess;
+      _aiCorrect = correct;
+      if (correct) {
+        _scores[_drawerIndex] = (_scores[_drawerIndex] ?? 0) + 1;
+      }
+    });
+  }
+
+  bool _aiMatches(String guess) {
+    final g = _normalize(guess);
+    final w = _normalize(_word);
+    if (g.isEmpty || w.isEmpty) return false;
+    return g == w || g.contains(w) || w.contains(g);
+  }
+
+  String _normalize(String s) {
+    s = s.trim().toLowerCase();
+    const from = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+    const to = 'aaaaaeeeeiiiiooooouuuunc';
+    final b = StringBuffer();
+    for (final ch in s.split('')) {
+      final idx = from.indexOf(ch);
+      b.write(idx >= 0 ? to[idx] : ch);
+    }
+    return b.toString().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  List<String> _serializeStrokes() {
+    final out = <String>[];
+    for (final s in _strokes) {
+      final hex = (s.color.value & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+      final b = StringBuffer(hex);
+      b.write(':');
+      for (final p in s.pts) {
+        b.write(p.dx.toStringAsFixed(4));
+        b.write(',');
+        b.write(p.dy.toStringAsFixed(4));
+        b.write(';');
+      }
+      out.add(b.toString());
+    }
+    return out;
   }
 
   // -------- Pantalla de dibujo ----------------------------------------------
@@ -742,7 +883,10 @@ class _LocalGameState extends State<LocalGame>
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
             child: _btn('Terminé · ¡A puntuar!', _green, () {
               _ctrl.stop();
-              setState(() => _phase = _Phase.reveal);
+              setState(() {
+                _turnsDone++;
+                _phase = _Phase.reveal;
+              });
             }),
           ),
         ],

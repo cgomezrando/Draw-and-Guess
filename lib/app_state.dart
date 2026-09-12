@@ -136,6 +136,12 @@ class FFAppState extends ChangeNotifier {
   set openaiKey(String value) {
     _openaiKey = value;
   }
+
+  int _localRounds = 0;
+  int get localRounds => _localRounds;
+  set localRounds(int value) {
+    _localRounds = value;
+  }
 }
 
 Color? _colorFromIntValue(int? val) {

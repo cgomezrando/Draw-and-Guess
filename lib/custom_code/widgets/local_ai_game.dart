@@ -71,14 +71,26 @@ class _LocalAiGameState extends State<LocalAiGame>
     return _rng;
   }
 
-  int _idx = 0;
+  int _idx = 0; // jugador actual
+  int _drawingsDone = 0; // dibujos completados en la partida
   List<String> _names = [];
-  List<String> _words = [];
-  List<AiResultStruct?> _results = [];
+  String _word = '';
+  AiResultStruct? _lastRes; // resultado del último dibujo
+  final Map<int, int> _totalScores = {}; // puntos acumulados por jugador
+
+  int get _limit {
+    try {
+      return FFAppState().localRounds as int; // 0 = indefinido
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // nº total de dibujos: el elegido, o uno por jugador si es indefinido
+  int get _total => _limit > 0 ? _limit : _names.length;
 
   String get _player =>
       (_idx >= 0 && _idx < _names.length) ? _names[_idx] : '—';
-  String get _word => (_idx >= 0 && _idx < _words.length) ? _words[_idx] : '';
 
   @override
   void initState() {
@@ -89,8 +101,7 @@ class _LocalAiGameState extends State<LocalAiGame>
     } catch (_) {}
 
     _names = _readNames();
-    _words = _buildWords(_names.length);
-    _results = List<AiResultStruct?>.generate(_names.length, (_) => null);
+    _pickWord();
 
     _ctrl = AnimationController(
       vsync: this,
@@ -124,7 +135,7 @@ class _LocalAiGameState extends State<LocalAiGame>
     return ['Jugador 1', 'Jugador 2'];
   }
 
-  List<String> _buildWords(int n) {
+  void _pickWord() {
     List<String> pool;
     try {
       pool = wordsForLevel(FFAppState().difficulty);
@@ -132,16 +143,7 @@ class _LocalAiGameState extends State<LocalAiGame>
       pool = const ['gato', 'perro', 'sol', 'casa', 'árbol', 'luna', 'pez'];
     }
     if (pool.isEmpty) pool = const ['gato', 'perro', 'sol', 'casa'];
-    final chosen = <String>[];
-    final used = <int>{};
-    int guard = 0;
-    while (chosen.length < n && guard < 2000) {
-      final idx = _rand() % pool.length;
-      if (used.add(idx)) chosen.add(pool[idx]);
-      guard++;
-    }
-    while (chosen.length < n) chosen.add(pool[_rand() % pool.length]);
-    return chosen;
+    _word = pool[_rand() % pool.length];
   }
 
   void _onTick() {
@@ -191,29 +193,32 @@ class _LocalAiGameState extends State<LocalAiGame>
     }
     if (!mounted) return;
     setState(() {
-      _results[_idx] = res;
+      _lastRes = res;
+      if (res.score > 0) {
+        _totalScores[_idx] = (_totalScores[_idx] ?? 0) + res.score;
+      }
       _phase = _Phase.result;
     });
   }
 
   void _next() {
-    if (_idx < _names.length - 1) {
+    _drawingsDone++;
+    if (_drawingsDone >= _total) {
+      _finish();
+    } else {
       setState(() {
-        _idx++;
+        _idx = _drawingsDone % _names.length;
         _strokes.clear();
+        _pickWord();
         _phase = _Phase.handoff;
       });
-    } else {
-      _finish();
     }
   }
 
   Future<void> _finish() async {
     final names = List<String>.from(_names);
-    final scores = List<int>.generate(_names.length, (i) {
-      final s = _results[i]?.score ?? 0;
-      return s < 0 ? 0 : s;
-    });
+    final scores =
+        List<int>.generate(_names.length, (i) => _totalScores[i] ?? 0);
     await showResults(context, names, scores); // navega al inicio al cerrar
   }
 
@@ -456,7 +461,7 @@ class _LocalAiGameState extends State<LocalAiGame>
       emojiWidget: _aiHead(84),
       badge: _teal,
       children: [
-        _pill('Jugador ${_idx + 1} de ${_names.length}', _teal),
+        _pill('Dibujo ${_drawingsDone + 1} de $_total', _teal),
         const SizedBox(height: 14),
         _title('Reto IA'),
         const SizedBox(height: 10),
@@ -524,7 +529,7 @@ class _LocalAiGameState extends State<LocalAiGame>
   }
 
   Widget _result() {
-    final r = _results[_idx];
+    final r = _lastRes;
     final score = r?.score ?? 0;
     final error = score < 0;
     final col =
@@ -551,8 +556,12 @@ class _LocalAiGameState extends State<LocalAiGame>
           if ((r?.reason ?? '').isNotEmpty) _subtitle(r!.reason),
         ],
         const SizedBox(height: 22),
-        _btn(_idx < _names.length - 1 ? 'Siguiente jugador' : 'Ver resultados',
-            _purple, _next),
+        _btn(
+            (_drawingsDone + 1) >= _total
+                ? 'Ver resultados'
+                : 'Siguiente jugador',
+            _purple,
+            _next),
         if (error) ...[
           const SizedBox(height: 8),
           TextButton(

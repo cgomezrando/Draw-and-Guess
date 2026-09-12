@@ -9,3 +9,4 @@ export '/custom_code/actions/add_stroke_online.dart' show addStrokeOnline;
 export '/custom_code/actions/submit_guess_online.dart' show submitGuessOnline;
 export '/custom_code/actions/score_drawing_ai.dart' show scoreDrawingAi;
 export '/custom_code/actions/show_results.dart' show showResults;
+export '/custom_code/actions/guess_drawing_ai.dart' show guessDrawingAi;
