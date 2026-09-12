@@ -214,8 +214,7 @@ class _LocalAiGameState extends State<LocalAiGame>
       final s = _results[i]?.score ?? 0;
       return s < 0 ? 0 : s;
     });
-    await showResults(context, names, scores);
-    if (mounted) Navigator.of(context).maybePop();
+    await showResults(context, names, scores); // navega al inicio al cerrar
   }
 
   // ==========================================================================

@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 // Begin custom action code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'package:go_router/go_router.dart';
+
 // ============================================================================
 //  Custom Action: showResults
 //  Muestra un diálogo con la clasificación final: 🏆 1º, 🥈 2º, 🥉 3º.
@@ -175,7 +177,7 @@ Future<void> showResults(
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16)),
                     ),
-                    child: const Text('Cerrar',
+                    child: const Text('Volver al inicio',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w800)),
                   ),
@@ -187,4 +189,9 @@ Future<void> showResults(
       );
     },
   );
+
+  // Al cerrar el diálogo, volver a la pantalla de inicio (reinicia la partida).
+  if (context.mounted) {
+    context.goNamed('HomePage');
+  }
 }

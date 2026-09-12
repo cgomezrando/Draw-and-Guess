@@ -613,12 +613,14 @@ class _OnlineGameState extends State<OnlineGame>
       }
     } catch (_) {}
     if (!mounted) return;
+    // Limpia la sala y muestra resultados; showResults navega al inicio.
+    try {
+      FFAppState().update(() {
+        FFAppState().currentRoomRef = null;
+        FFAppState().currentRoomCode = '';
+      });
+    } catch (_) {}
     await showResults(context, names, scores);
-    if (widget.onFinish != null) {
-      await widget.onFinish!();
-    } else if (mounted) {
-      Navigator.of(context).maybePop();
-    }
   }
 }
 
