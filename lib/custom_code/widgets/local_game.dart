@@ -42,6 +42,10 @@ String _nextWord(String level) {
   return _wordDeck[_wordPos++];
 }
 
+// Colores extra de pincel
+const Color _skin = Color(0xFFFFC9A2); // color carne / piel
+const Color _brown = Color(0xFF8B5E3C); // marrón
+
 /// ============================================================================
 /// LocalGame  —  Modo CLÁSICO local (uno dibuja, el resto adivina en voz
 /// alta) Flujo: handoff → showword → ready → drawing(cuenta atrás) →
@@ -84,6 +88,7 @@ class _LocalGameState extends State<LocalGame>
   String _word = '';
   final List<_Stroke> _strokes = [];
   Color _penColor = _navy;
+  bool _eraser = false; // goma de borrar activa
   late final AnimationController _ctrl;
   int _seconds = 60; // duración elegida (configurable)
   int _left = 60;
@@ -193,6 +198,7 @@ class _LocalGameState extends State<LocalGame>
     } catch (_) {}
     setState(() {
       _strokes.clear();
+      _eraser = false;
       _word = '';
       _awardedTo = null;
       _aiBusy = false;
@@ -841,7 +847,9 @@ class _LocalGameState extends State<LocalGame>
                             child: GestureDetector(
                               onPanStart: (d) {
                                 setState(() {
-                                  final s = _Stroke(_penColor, 4);
+                                  final s = _eraser
+                                      ? _Stroke(Colors.white, 22)
+                                      : _Stroke(_penColor, 4);
                                   s.pts.add(_norm(d.localPosition, side));
                                   _strokes.add(s);
                                 });
@@ -868,33 +876,49 @@ class _LocalGameState extends State<LocalGame>
               ),
             ),
           ),
-          // Herramientas
+          // Herramientas (barra siempre visible)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _swatch(_navy),
-                _swatch(_red),
-                _swatch(_blue),
-                _swatch(_green),
-                _swatch(_orange),
-                IconButton(
-                  onPressed: () {
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _swatch(_navy),
+                  _swatch(_red),
+                  _swatch(_blue),
+                  _swatch(_green),
+                  _swatch(_orange),
+                  _swatch(_brown),
+                  _swatch(_skin),
+                  _toolChip(const Text('🧽', style: TextStyle(fontSize: 16)),
+                      'Goma', _eraser, () => setState(() => _eraser = true)),
+                  _toolChip(const Icon(Icons.undo, size: 18, color: _ink),
+                      'Deshacer', false, () {
                     setState(() {
                       if (_strokes.isNotEmpty) _strokes.removeLast();
                     });
-                  },
-                  icon: const Icon(Icons.undo, color: _ink),
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _strokes.clear()),
-                  icon: const Icon(Icons.delete_outline, color: _ink),
-                ),
-              ],
+                  }),
+                  _toolChip(
+                      const Icon(Icons.delete_outline, size: 18, color: _ink),
+                      'Borrar todo',
+                      false,
+                      () => setState(() => _strokes.clear())),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -919,12 +943,15 @@ class _LocalGameState extends State<LocalGame>
   }
 
   Widget _swatch(Color c) {
-    final sel = _penColor == c;
+    final sel = _penColor == c && !_eraser;
     return GestureDetector(
-      onTap: () => setState(() => _penColor = c),
+      onTap: () => setState(() {
+        _penColor = c;
+        _eraser = false; // elegir color desactiva la goma
+      }),
       child: Container(
-        width: 30,
-        height: 30,
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
           color: c,
           shape: BoxShape.circle,
@@ -935,6 +962,32 @@ class _LocalGameState extends State<LocalGame>
                 color: Colors.black.withOpacity(0.12),
                 blurRadius: 4,
                 offset: const Offset(0, 2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Chip de herramienta (goma / deshacer / borrar todo).
+  Widget _toolChip(Widget icon, String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? _teal.withOpacity(0.16) : const Color(0xFFF3F5F8),
+          borderRadius: BorderRadius.circular(14),
+          border:
+              Border.all(color: active ? _teal : Colors.transparent, width: 2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            icon,
+            const SizedBox(width: 6),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w800, color: _ink)),
           ],
         ),
       ),
