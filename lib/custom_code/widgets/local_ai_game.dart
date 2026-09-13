@@ -10,6 +10,38 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'dart:math' as math;
+
+// ============================================================================
+//  Baraja de palabras compartida (persiste durante la sesión de la app).
+//  Evita que dos partidas empiecen por las mismas palabras: cada partida
+//  CONTINÚA donde se quedó la anterior y no se repiten palabras hasta agotar
+//  el nivel. Al agotarse, se vuelve a barajar con otro orden.
+// ============================================================================
+final math.Random _wordRnd = math.Random();
+List<String> _wordDeck = [];
+int _wordPos = 0;
+String _wordDeckLevel = '';
+
+String _nextWord(String level) {
+  if (_wordDeck.isEmpty ||
+      _wordPos >= _wordDeck.length ||
+      _wordDeckLevel != level) {
+    List<String> pool;
+    try {
+      pool = List<String>.from(wordsForLevel(level));
+    } catch (_) {
+      pool = ['gato', 'perro', 'sol', 'casa', 'árbol'];
+    }
+    if (pool.isEmpty) pool = ['gato', 'perro', 'sol'];
+    pool.shuffle(_wordRnd);
+    _wordDeck = pool;
+    _wordPos = 0;
+    _wordDeckLevel = level;
+  }
+  return _wordDeck[_wordPos++];
+}
+
 // ============================================================================
 //  LocalAiGame  —  Modo RETO IA local
 //  Cada jugador dibuja SU palabra (distinta). Al terminar, GPT-4o-mini puntúa
@@ -64,13 +96,6 @@ class _LocalAiGameState extends State<LocalAiGame>
   int _seconds = 60;
   int _left = 60;
 
-  // Generador pseudoaleatorio (Park-Miller, seguro en web)
-  int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
-  int _rand() {
-    _rng = (_rng * 48271) % 2147483647;
-    return _rng;
-  }
-
   int _idx = 0; // jugador actual
   int _drawingsDone = 0; // dibujos completados en la partida
   List<String> _names = [];
@@ -86,8 +111,8 @@ class _LocalAiGameState extends State<LocalAiGame>
     }
   }
 
-  // nº total de dibujos: el elegido, o uno por jugador si es indefinido
-  int get _total => _limit > 0 ? _limit : _names.length;
+  // ¿la partida tiene un nº fijo de dibujos? (5/10) o es indefinida (∞)
+  bool get _bounded => _limit > 0;
 
   String get _player =>
       (_idx >= 0 && _idx < _names.length) ? _names[_idx] : '—';
@@ -136,14 +161,7 @@ class _LocalAiGameState extends State<LocalAiGame>
   }
 
   void _pickWord() {
-    List<String> pool;
-    try {
-      pool = wordsForLevel(FFAppState().difficulty);
-    } catch (_) {
-      pool = const ['gato', 'perro', 'sol', 'casa', 'árbol', 'luna', 'pez'];
-    }
-    if (pool.isEmpty) pool = const ['gato', 'perro', 'sol', 'casa'];
-    _word = pool[_rand() % pool.length];
+    _word = _nextWord(FFAppState().difficulty);
   }
 
   void _onTick() {
@@ -203,7 +221,9 @@ class _LocalAiGameState extends State<LocalAiGame>
 
   void _next() {
     _drawingsDone++;
-    if (_drawingsDone >= _total) {
+    // Sólo termina solo si la partida es acotada (5/10). Si es ∞, nunca
+    // se acaba sola: el usuario decide cuándo con "Terminar y ver resultados".
+    if (_bounded && _drawingsDone >= _limit) {
       _finish();
     } else {
       setState(() {
@@ -461,7 +481,11 @@ class _LocalAiGameState extends State<LocalAiGame>
       emojiWidget: _aiHead(84),
       badge: _teal,
       children: [
-        _pill('Dibujo ${_drawingsDone + 1} de $_total', _teal),
+        _pill(
+            _bounded
+                ? 'Dibujo ${_drawingsDone + 1} de $_limit'
+                : 'Dibujo ${_drawingsDone + 1}',
+            _teal),
         const SizedBox(height: 14),
         _title('Reto IA'),
         const SizedBox(height: 10),
@@ -556,12 +580,19 @@ class _LocalAiGameState extends State<LocalAiGame>
           if ((r?.reason ?? '').isNotEmpty) _subtitle(r!.reason),
         ],
         const SizedBox(height: 22),
-        _btn(
-            (_drawingsDone + 1) >= _total
-                ? 'Ver resultados'
-                : 'Siguiente jugador',
-            _purple,
-            _next),
+        if (_bounded && (_drawingsDone + 1) >= _limit)
+          _btn('Ver resultados', _purple, _finish)
+        else
+          _btn('Siguiente dibujo', _purple, _next),
+        // En partidas ∞, botón para terminar cuando el usuario quiera.
+        if (!_bounded && !error) ...[
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _finish,
+            child: const Text('Terminar y ver resultados',
+                style: TextStyle(color: _muted, fontWeight: FontWeight.w700)),
+          ),
+        ],
         if (error) ...[
           const SizedBox(height: 8),
           TextButton(

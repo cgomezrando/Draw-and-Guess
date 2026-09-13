@@ -10,6 +10,38 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'dart:math' as math;
+
+// ============================================================================
+//  Baraja de palabras compartida (persiste durante la sesión de la app).
+//  Evita que dos partidas empiecen por las mismas palabras: cada partida
+//  CONTINÚA donde se quedó la anterior y no se repiten palabras hasta agotar
+//  el nivel. Al agotarse, se vuelve a barajar con otro orden.
+// ============================================================================
+final math.Random _wordRnd = math.Random();
+List<String> _wordDeck = [];
+int _wordPos = 0;
+String _wordDeckLevel = '';
+
+String _nextWord(String level) {
+  if (_wordDeck.isEmpty ||
+      _wordPos >= _wordDeck.length ||
+      _wordDeckLevel != level) {
+    List<String> pool;
+    try {
+      pool = List<String>.from(wordsForLevel(level));
+    } catch (_) {
+      pool = ['gato', 'perro', 'sol', 'casa', 'árbol'];
+    }
+    if (pool.isEmpty) pool = ['gato', 'perro', 'sol'];
+    pool.shuffle(_wordRnd);
+    _wordDeck = pool;
+    _wordPos = 0;
+    _wordDeckLevel = level;
+  }
+  return _wordDeck[_wordPos++];
+}
+
 /// ============================================================================
 /// LocalGame  —  Modo CLÁSICO local (uno dibuja, el resto adivina en voz
 /// alta) Flujo: handoff → showword → ready → drawing(cuenta atrás) →
@@ -62,13 +94,6 @@ class _LocalGameState extends State<LocalGame>
     } catch (_) {
       return 0;
     }
-  }
-
-  // Generador pseudoaleatorio (Park-Miller, seguro en web)
-  int _rng = (DateTime.now().millisecondsSinceEpoch % 2147483646) + 1;
-  int _rand() {
-    _rng = (_rng * 48271) % 2147483647;
-    return _rng;
   }
 
   final Map<int, int> _scores = {}; // puntos por jugador (índice)
@@ -147,14 +172,7 @@ class _LocalGameState extends State<LocalGame>
 
   // -------- Lógica -----------------------------------------------------------
   void _pickWord() {
-    List<String> pool;
-    try {
-      pool = wordsForLevel(FFAppState().difficulty);
-    } catch (_) {
-      pool = const ['gato', 'perro', 'sol', 'casa', 'árbol'];
-    }
-    if (pool.isEmpty) pool = const ['gato', 'perro', 'sol'];
-    _word = pool[_rand() % pool.length];
+    _word = _nextWord(FFAppState().difficulty);
   }
 
   void _startTimer() {
